@@ -1,10 +1,11 @@
 import httpx
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends,  HTTPException, status
 
 from app.schemas.auth import KakaoLoginRequest, LoginResponse
 from app.services.auth_service import get_kakao_user
 from app.core.security import create_access_token
+from app.api.deps import get_current_user_id
 
 router = APIRouter(
     prefix="/auth", # 이 파일 안의 모든 API 앞에 자동으로 /auth가 붙음
@@ -25,10 +26,19 @@ async def kakao_login(request: KakaoLoginRequest): #request: KakaoLoginRequest�
             detail = "유효하지 않은 카카오 엑세스 토큰입니다."
         )from exc
 
+    # 나중에는 kakao_user["id"]로 사용자 조회해서 그 users 테이블의 id를 이용해서 토큰을 만들겠지
     soomtrip_access_token = create_access_token(
         str(kakao_user["id"])
     )
     return {
         "access_token": soomtrip_access_token,
         "token_type": "bearer"
+    }
+
+@router.get("/verify")
+def verify_token(
+    current_user_id: str = Depends(get_current_user_id)
+):
+    return {
+        "user_id": current_user_id
     }
