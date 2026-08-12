@@ -5,7 +5,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
 
     database_url: str = ""
+    
     jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
 
     kakao_client_id: str=""
     kakao_client_secret: str=""
