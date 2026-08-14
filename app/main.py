@@ -6,6 +6,7 @@ from app.api.auth import router as auth_router
 from app.core.config import settings
 
 
+from app.api.preferences import router as preferences_router
 app = FastAPI()
 
 
@@ -17,3 +18,4 @@ def root():
 
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(preferences_router)
