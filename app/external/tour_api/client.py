@@ -68,7 +68,13 @@ def get_area_based_list(
         params["cat3"] = cat3
 
     body = _request("areaBasedList2", params)
-    items = body.get("items", {}).get("item", [])
+    items_container = body.get("items", {})
+
+    # 결과가 없을 때 빈 문자열("")이나 None으로 오는 경우 방어
+    if not isinstance(items_container, dict):
+        return []
+
+    items = items_container.get("item", [])
 
     if isinstance(items, dict):
         items = [items]
@@ -96,7 +102,12 @@ def get_location_based_list(
         params["contentTypeId"] = content_type_id
 
     body = _request("locationBasedList2", params)
-    items = body.get("items", {}).get("item", [])
+    items_container = body.get("items", {})
+
+    if not isinstance(items_container, dict):
+        return []
+
+    items = items_container.get("item", [])
 
     if isinstance(items, dict):
         items = [items]
