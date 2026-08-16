@@ -1,7 +1,4 @@
 def normalize_tour_item(raw: dict) -> dict:
-    """
-    TourAPI 원본 응답을 우리 서비스 통일 형식으로 변환.
-    """
     return {
         "id": raw.get("contentid"),
         "content_type_id": raw.get("contenttypeid"),
@@ -13,4 +10,6 @@ def normalize_tour_item(raw: dict) -> dict:
         "cat1": raw.get("cat1"),
         "cat2": raw.get("cat2"),
         "cat3": raw.get("cat3"),
+        "area_code": raw.get("areacode"),
+        "sigungu_code": raw.get("sigungucode"),
     }
