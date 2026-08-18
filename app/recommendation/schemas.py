@@ -6,8 +6,9 @@ class PreferenceInput(BaseModel):
     theme_weights: dict[str, float]
     budget_level: int = 2
     transport: Optional[str] = None
-    pet_friendly: bool = False
     activity_intensity: int = 3
+    pet_friendly: bool = False
+    travel_companion: Optional[str] = None
     area_code: str
 
 
