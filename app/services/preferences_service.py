@@ -46,14 +46,16 @@ def get_my_preference_results(
         .all()
     )
 
-
-def get_latest_preference_result(
+def get_my_preference_result_by_id(
     db: Session,
     user_id: int,
+    preference_id: int,
 ) -> PreferenceResult | None:
     return (
         db.query(PreferenceResult)
-        .filter(PreferenceResult.user_id == user_id)
-        .order_by(PreferenceResult.created_at.desc())
+        .filter(
+            PreferenceResult.id == preference_id,
+            PreferenceResult.user_id == user_id,
+        )
         .first()
     )
