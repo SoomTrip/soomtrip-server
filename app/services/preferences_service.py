@@ -11,16 +11,21 @@ def save_preference_result(
 ) -> PreferenceResult:
     preference_result = PreferenceResult(
         user_id=user_id,
-        nature_score=request.nature_score,
-        activity_score=request.activity_score,
-        healing_score=request.healing_score,
-        urban_score=request.urban_score,
         ocean_score=request.ocean_score,
-        budget_level=request.budget_level,
-        transport=request.transport,
-        activity_intensity=request.activity_intensity,
-        travel_companion=request.travel_companion,
-        indoor_preference=request.indoor_preference,
+        nature_score=request.nature_score,
+        theme_choice=request.theme_choice,
+        walk_transit_score=request.walk_transit_score,
+        car_score=request.car_score,
+        mobility_choice=request.mobility_choice,
+        solo_score=request.solo_score,
+        group_score=request.group_score,
+        companion_choice=request.companion_choice,
+        rest_score=request.rest_score,
+        dynamic_score=request.dynamic_score,
+        activity_choice=request.activity_choice,
+        outdoor_score=request.outdoor_score,
+        indoor_score=request.indoor_score,
+        indoor_choice=request.indoor_choice,
     )
 
     db.add(preference_result)
@@ -39,4 +44,16 @@ def get_my_preference_results(
         .filter(PreferenceResult.user_id == user_id)
         .order_by(PreferenceResult.created_at.desc())
         .all()
+    )
+
+
+def get_latest_preference_result(
+    db: Session,
+    user_id: int,
+) -> PreferenceResult | None:
+    return (
+        db.query(PreferenceResult)
+        .filter(PreferenceResult.user_id == user_id)
+        .order_by(PreferenceResult.created_at.desc())
+        .first()
     )
