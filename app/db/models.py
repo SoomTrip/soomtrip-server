@@ -67,14 +67,28 @@ class PreferenceResult(Base):
     user = relationship("User")
 
 
-# 저장한 여행지 (관광공사 원본 데이터는 저장 안 하고, contentId만 저장해서 나중에 실시간 재조회)
 class SavedRegion(Base):
+    """사용자가 저장(찜)한 여행지 (지역 단위, 여러 관광지를 포함)"""
     __tablename__ = "saved_regions"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    region_content_id = Column(String, nullable=False)  # TourAPI contentId
-    region_name = Column(String, nullable=False)          # 화면 표시용 이름 (캐시 목적)
+    region_name = Column(String, nullable=False)   # 예: "양양 현북면"
+    score = Column(Integer, nullable=True)          # 추천 당시 점수 (참고용, 선택사항)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")
+    spots = relationship("SavedRegionSpot", back_populates="saved_region", cascade="all, delete-orphan")
+
+
+class SavedRegionSpot(Base):
+    """저장된 여행지에 포함된 관광지 하나 (앵커스팟 포함 전체)"""
+    __tablename__ = "saved_region_spots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)
+    content_id = Column(String, nullable=False)      # TourAPI contentId (실시간 재조회용)
+    name = Column(String, nullable=False)             # 화면 표시용 이름 (캐시 목적)
+    is_anchor = Column(Boolean, default=False)         # 앵커스팟(대표 관광지) 여부
+
+    saved_region = relationship("SavedRegion", back_populates="spots")
