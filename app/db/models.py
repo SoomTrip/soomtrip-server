@@ -56,11 +56,8 @@ class PreferenceResult(Base):
     budget_level = Column(Integer, nullable=True)         # 1(가성비) ~ 3(플렉스)
     transport = Column(String, nullable=True)              # "CAR" 또는 "PUBLIC_TRANSIT"
     activity_intensity = Column(Integer, nullable=True)    # 1(완전휴식) ~ 5(완전액티비티)
-    departure_area_code = Column(String, nullable=True)    # 출발/희망 지역 (TourAPI 지역코드)
-
-    # 특수 조건 (추가 구현시 활용 예정)
-    pet_friendly = Column(Boolean, default=False)          # 반려동물 동반 여부
-    wellness_focus = Column(Boolean, default=False)        # 웰니스/힐링 목적 여부
+    travel_companion = Column(String, nullable=True)        # 혼자여행인지 (solo vs group)
+    indoor_preference = Column(Boolean, nullable=True)      # 실내 vs 야외
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
