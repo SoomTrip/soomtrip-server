@@ -45,19 +45,30 @@ class PreferenceResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # 태그별 누적 점수
-    nature_score = Column(Integer, default=0)
-    activity_score = Column(Integer, default=0)
-    healing_score = Column(Integer, default=0)
-    urban_score = Column(Integer, default=0)
-    ocean_score = Column(Integer, default=0)   # 바다
+    # Round 1 — 풍경 (theme): ocean vs nature
+    ocean_score = Column(Integer, default=0)         # 1
+    nature_score = Column(Integer, default=0)        # 2
+    theme_choice = Column(String, nullable=True)      # 3 — "ocean" 또는 "nature"
 
-    # 여행 조건
-    budget_level = Column(Integer, nullable=True)         # 1(가성비) ~ 3(플렉스)
-    transport = Column(String, nullable=True)              # "CAR" 또는 "PUBLIC_TRANSIT"
-    activity_intensity = Column(Integer, nullable=True)    # 1(완전휴식) ~ 5(완전액티비티)
-    travel_companion = Column(String, nullable=True)        # 혼자여행인지 (solo vs group)
-    indoor_preference = Column(Boolean, nullable=True)      # 실내 vs 야외
+    # Round 2 — 이동수단 (mobility): walk_transit vs car
+    walk_transit_score = Column(Integer, default=0)  # 4
+    car_score = Column(Integer, default=0)             # 5
+    mobility_choice = Column(String, nullable=True)    # 6 — "walk_transit" 또는 "car"
+
+    # Round 3 — 동행자 (companion): solo vs group
+    solo_score = Column(Integer, default=0)            # 7
+    group_score = Column(Integer, default=0)           # 8
+    companion_choice = Column(String, nullable=True)   # 9 — "solo" 또는 "group"
+
+    # Round 4 — 여행스타일 (activity): rest vs dynamic
+    rest_score = Column(Integer, default=0)             # 10
+    dynamic_score = Column(Integer, default=0)          # 11
+    activity_choice = Column(String, nullable=True)     # 12 — "rest" 또는 "dynamic"
+
+    # Round 5 — 공간무드 (indoor): false(야외) vs true(실내)
+    outdoor_score = Column(Integer, default=0)          # 13
+    indoor_score = Column(Integer, default=0)           # 14
+    indoor_choice = Column(Boolean, nullable=True)       # 15 — true(실내) 또는 false(야외)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

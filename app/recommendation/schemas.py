@@ -3,12 +3,12 @@ from typing import Optional
 
 
 class PreferenceInput(BaseModel):
-    theme_weights: dict[str, float]
+    theme_weights: dict[str, float]     # 엔진 계산용 (아래에서 15개 필드로부터 조립)
+    mobility_choice: Optional[str] = None    # "walk_transit" 또는 "car"
+    companion_choice: Optional[str] = None   # "solo" 또는 "group"
+    activity_intensity: int = 3               # rest/dynamic 점수로부터 환산
+    indoor_choice: Optional[bool] = None      # 실내(true)/야외(false)
     budget_level: int = 2
-    transport: Optional[str] = None
-    activity_intensity: int = 3
-    pet_friendly: bool = False
-    travel_companion: Optional[str] = None
     area_code: str
 
 

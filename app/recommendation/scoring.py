@@ -101,12 +101,29 @@ def calculate_budget_score(spot: dict, budget_level: int) -> float:
     return 50.0
 
 
+def calculate_indoor_match_score(spot: dict, indoor_choice: bool = None) -> float:
+    """
+    사용자의 실내/실외 선호와 이 장소가 얼마나 맞는지 (0~100).
+    cat1이 A02(문화시설)면 실내형, 그 외(A01 자연, A03 레포츠)는 실외형으로 간주.
+    선호 정보가 없으면 중립값(50) 반환.
+    """
+    if indoor_choice is None:
+        return 50.0
+
+    spot_is_indoor = spot.get("cat1") == "A02"
+
+    if indoor_choice == spot_is_indoor:
+        return 100.0
+    return 30.0  # 완전히 배제하지 않고 약한 페널티만
+
+
 # ── 최종 스코어 계산 — 가중합 ─────────────────────────
 
 DEFAULT_WEIGHTS = {
-    "theme": 0.45,
-    "diversity": 0.30,
+    "theme": 0.40,
+    "diversity": 0.25,
     "crowd": 0.15,
+    "indoor_match": 0.10,
     "budget": 0.10,
 }
 
@@ -116,22 +133,22 @@ def calculate_final_score(
     theme_weights: dict,
     budget_level: int = 2,
     stay_intensity_val: float = None,
+    indoor_choice: bool = None,
     score_weights: dict = None,
 ) -> dict:
-    """
-    지역 후보 하나의 최종 점수를 계산.
-    """
     weights = score_weights or DEFAULT_WEIGHTS
 
     theme_score = calculate_theme_score(spot, theme_weights)
     diversity_score = calculate_diversity_score(spot.get("nearby_count", 0))
     crowd_score = calculate_crowd_score(stay_intensity_val)
+    indoor_match_score = calculate_indoor_match_score(spot, indoor_choice)
     budget_score = calculate_budget_score(spot, budget_level)
 
     final_score = (
         theme_score * weights["theme"]
         + diversity_score * weights["diversity"]
         + crowd_score * weights["crowd"]
+        + indoor_match_score * weights["indoor_match"]
         + budget_score * weights["budget"]
     )
 
@@ -141,6 +158,7 @@ def calculate_final_score(
             "theme_score": theme_score,
             "diversity_score": diversity_score,
             "crowd_score": crowd_score,
+            "indoor_match_score": indoor_match_score,
             "budget_score": budget_score,
         },
     }
