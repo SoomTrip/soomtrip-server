@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.api.users import router as users_router
 from app.api.saved_regions import router as saved_regions_router
 from app.api.friends import router as friends_router
-
+from app.api.recommendations import router as recommendations_router
 
 
 from app.api.preferences import router as preferences_router
@@ -26,3 +26,4 @@ app.include_router(preferences_router)
 app.include_router(users_router)
 app.include_router(saved_regions_router)
 app.include_router(friends_router)
+app.include_router(recommendations_router)
