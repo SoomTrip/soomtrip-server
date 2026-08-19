@@ -6,7 +6,7 @@ from app.db.models import PreferenceResult
 from app.recommendation.converter import get_area_pool
 from app.recommendation.engine import get_recommendations
 from app.recommendation.schemas import PreferenceInput, RecommendationResult
-from app.services.preferences_service import get_latest_preference_result
+from app.services.preferences_service import get_my_preference_result_by_id
 
 
 INDOOR_WEIGHT_RATIO = 0.3
@@ -58,13 +58,15 @@ def convert_preference_result_to_input(
     )
 
 
-def create_recommendation_for_user(
+def create_recommendation_for_preference(
     db: Session,
     user_id: int,
+    preference_id: int,
 ) -> RecommendationResult | None:
-    preference_result = get_latest_preference_result(
+    preference_result = get_my_preference_result_by_id(
         db=db,
         user_id=user_id,
+        preference_id=preference_id,
     )
 
     if preference_result is None:
