@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 
 Transport = Literal["CAR", "PUBLIC_TRANSIT"]
+TravelCompanion = Literal["solo", "group"]
 
 
 class PreferenceSaveRequest(BaseModel):
@@ -12,18 +13,13 @@ class PreferenceSaveRequest(BaseModel):
     activity_score: int = 0
     healing_score: int = 0
     urban_score: int = 0
-    food_score: int = 0
-    history_score: int = 0
     ocean_score: int = 0
-    forest_score: int = 0
 
     budget_level: int | None = Field(default=None, ge=1, le=3)
     transport: Transport | None = None
     activity_intensity: int | None = Field(default=None, ge=1, le=5)
-    departure_area_code: str | None = None
-
-    pet_friendly: bool = False
-    wellness_focus: bool = False
+    travel_companion: TravelCompanion | None = None
+    indoor_preference: bool | None = None
 
 
 class PreferenceResponse(PreferenceSaveRequest):

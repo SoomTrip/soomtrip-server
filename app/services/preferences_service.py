@@ -15,16 +15,12 @@ def save_preference_result(
         activity_score=request.activity_score,
         healing_score=request.healing_score,
         urban_score=request.urban_score,
-        food_score=request.food_score,
-        history_score=request.history_score,
         ocean_score=request.ocean_score,
-        forest_score=request.forest_score,
         budget_level=request.budget_level,
         transport=request.transport,
         activity_intensity=request.activity_intensity,
-        departure_area_code=request.departure_area_code,
-        pet_friendly=request.pet_friendly,
-        wellness_focus=request.wellness_focus,
+        travel_companion=request.travel_companion,
+        indoor_preference=request.indoor_preference,
     )
 
     db.add(preference_result)
