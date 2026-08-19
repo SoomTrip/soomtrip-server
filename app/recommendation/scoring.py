@@ -1,17 +1,65 @@
-from app.recommendation.mapping import get_theme_from_cat3
+import math
+from app.recommendation.mapping import get_theme_from_cat3, ALL_THEMES
 
 
-# ── 지표 1: 테마 매칭도 ──────────────────────────────
+# ── 지표 1: 테마 매칭도 (코사인 유사도 기반) ────────────────
+
+def build_theme_vector(spot: dict) -> dict:
+    """
+    이 장소의 특성을 테마별 벡터로 구성.
+    장소 자신의 테마에 절반 비중을 주고,
+    주변 관광지(nearby_spots)들의 테마 분포를 나머지 절반 비중으로 반영.
+    """
+    vector = {theme: 0.0 for theme in ALL_THEMES}
+
+    # 장소 자신의 테마 (비중 절반)
+    own_theme = get_theme_from_cat3(spot.get("cat1"), spot.get("cat3"))
+    if own_theme in vector:
+        vector[own_theme] += 0.5
+
+    # 주변 관광지들의 테마 분포 (나머지 절반을 비중으로 분배)
+    nearby = spot.get("nearby_spots", [])
+    if nearby:
+        nearby_theme_counts = {theme: 0 for theme in ALL_THEMES}
+        for n in nearby:
+            n_theme = get_theme_from_cat3(n.get("cat1"), n.get("cat3"))
+            if n_theme in nearby_theme_counts:
+                nearby_theme_counts[n_theme] += 1
+
+        total_nearby = sum(nearby_theme_counts.values())
+        if total_nearby > 0:
+            for theme, count in nearby_theme_counts.items():
+                vector[theme] += 0.5 * (count / total_nearby)
+
+    return vector
+
+
+def cosine_similarity(vec_a: dict, vec_b: dict) -> float:
+    """
+    두 벡터(딕셔너리 형태) 사이의 코사인 유사도 계산.
+    결과는 0~1 범위 (완전히 다르면 0, 완전히 같은 방향이면 1).
+    """
+    keys = set(vec_a.keys()) | set(vec_b.keys())
+
+    dot_product = sum(vec_a.get(k, 0.0) * vec_b.get(k, 0.0) for k in keys)
+    norm_a = math.sqrt(sum(vec_a.get(k, 0.0) ** 2 for k in keys))
+    norm_b = math.sqrt(sum(vec_b.get(k, 0.0) ** 2 for k in keys))
+
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+
+    return dot_product / (norm_a * norm_b)
+
 
 def calculate_theme_score(spot: dict, theme_weights: dict) -> float:
     """
     이 관광지가 사용자 취향과 얼마나 맞는지 (0~100).
-    cat1뿐 아니라 cat3까지 활용해서 바다/숲처럼 세분화된 테마도 매칭.
+    코사인 유사도(Cosine Similarity) 기반: 장소의 테마 벡터와
+    사용자의 취향 벡터 사이의 방향 유사성을 측정.
     """
-    spot_theme = get_theme_from_cat3(spot.get("cat1"), spot.get("cat3"))
-
-    weight = theme_weights.get(spot_theme, 0.0)
-    return round(weight * 100, 2)
+    spot_vector = build_theme_vector(spot)
+    similarity = cosine_similarity(spot_vector, theme_weights)
+    return round(similarity * 100, 2)
 
 
 # ── 지표 2: 다양성(인프라 풍부도) ──────────────────────
@@ -27,7 +75,7 @@ def calculate_diversity_score(nearby_count: int, max_reference: int = 100) -> fl
     return round(normalized * 100, 2)
 
 
-# ── 지표 3: 혼잡도(수요강도) — 추후 API 연동 시 사용 ─────
+# ── 지표 3: 혼잡도(체류 강도) ─────────────────────────
 
 def calculate_crowd_score(stay_intensity_val: float = None) -> float:
     """
@@ -40,8 +88,6 @@ def calculate_crowd_score(stay_intensity_val: float = None) -> float:
     if stay_intensity_val is None:
         return 50.0
 
-    # 값의 실제 분포를 모르니, 우선 0~100 범위로 가정하고 역산
-    # (실제 서비스 운영하며 관찰한 값 범위로 추후 보정 필요)
     normalized = min(max(stay_intensity_val, 0), 100)
     return round(100 - normalized, 2)
 
@@ -72,6 +118,9 @@ def calculate_final_score(
     stay_intensity_val: float = None,
     score_weights: dict = None,
 ) -> dict:
+    """
+    지역 후보 하나의 최종 점수를 계산.
+    """
     weights = score_weights or DEFAULT_WEIGHTS
 
     theme_score = calculate_theme_score(spot, theme_weights)
@@ -111,6 +160,8 @@ def normalize_theme_weights(raw_scores: dict) -> dict:
     return {k: round(v / total, 4) for k, v in raw_scores.items()}
 
 
+# ── 휴식/액티비티 강도 반영 ─────────────────────────
+
 def adjust_weights_by_activity_intensity(theme_weights: dict, activity_intensity: int) -> dict:
     """
     activity_intensity(1~5)에 따라 activity 테마 가중치를 보정.
@@ -119,19 +170,16 @@ def adjust_weights_by_activity_intensity(theme_weights: dict, activity_intensity
     """
     adjusted = dict(theme_weights)
 
-    # 1~5를 -1.0 ~ +1.0 스케일로 변환 (3이 중립)
-    intensity_factor = (activity_intensity - 3) / 2.0  # -1.0(휴식) ~ +1.0(액티비티)
+    intensity_factor = (activity_intensity - 3) / 2.0
 
-    ADJUSTMENT_STRENGTH = 0.15  # 보정 강도 (너무 세게 흔들리지 않도록)
+    ADJUSTMENT_STRENGTH = 0.15
 
     current_activity = adjusted.get("activity", 0.0)
     current_healing = adjusted.get("healing", 0.0)
 
-    # activity와 healing을 서로 반대 방향으로 보정
     adjusted["activity"] = max(0.0, current_activity + intensity_factor * ADJUSTMENT_STRENGTH)
     adjusted["healing"] = max(0.0, current_healing - intensity_factor * ADJUSTMENT_STRENGTH)
 
-    # 다시 정규화 (합이 1이 되도록)
     total = sum(adjusted.values())
     if total > 0:
         adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}
