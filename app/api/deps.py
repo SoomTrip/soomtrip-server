@@ -13,7 +13,7 @@ bearer_scheme = HTTPBearer()
 
 def get_current_user_id(
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
-        ) -> str:
+        ) -> int:
     
     token = credentials.credentials # 순수 토큰만 가져옴
 
@@ -34,7 +34,7 @@ def get_current_user_id(
                 detail="유효하지 않은 인증 토큰입니다."
             )
 
-        return user_id
+        return int(user_id)
 
     # exp가 지난 토큰 검증
     except jwt.ExpiredSignatureError as exc:
