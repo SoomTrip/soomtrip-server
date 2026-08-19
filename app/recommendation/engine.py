@@ -1,5 +1,8 @@
+import random
+import concurrent.futures
 from app.external.tour_api.client import get_area_based_list, get_location_based_list
 from app.external.tour_api.schemas import normalize_tour_item
+from app.external.demand_api.client import get_stay_intensity
 from app.recommendation.mapping import THEME_TO_CAT1, THEME_TO_CONTENT_TYPE
 from app.recommendation.scoring import (
     calculate_final_score,
@@ -56,14 +59,12 @@ def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -
 
 def apply_infra_cutoff(candidates: list[dict]) -> list[dict]:
     """
-    2단계: 반경 내 연관 스팟이 너무 적은 후보를 제거하고,
-    통과한 후보에는 주변 스팟 원본 리스트를 저장해둔다.
-    (이 리스트가 나중에 '앵커스팟의 추천 관광지'가 됨)
+    반경 내 연관 스팟이 너무 적은 후보를 제거.
+    병렬로 API 호출해서 속도 개선.
     """
-    filtered = []
-    for spot in candidates:
+    def fetch_nearby(spot):
         if spot["latitude"] is None or spot["longitude"] is None:
-            continue
+            return None
 
         nearby_raw = get_location_based_list(
             map_x=spot["longitude"],
@@ -78,7 +79,12 @@ def apply_infra_cutoff(candidates: list[dict]) -> list[dict]:
                 normalize_tour_item(n) for n in nearby_raw
                 if n.get("contentid") != spot["id"]
             ]
-            filtered.append(spot)
+            return spot
+        return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        results = executor.map(fetch_nearby, candidates)
+        filtered = [r for r in results if r is not None]
 
     return filtered
 
@@ -114,17 +120,41 @@ def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
     return merged
 
 
+def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int) -> list[dict]:
+    """
+    각 후보에 혼잡도 API를 병렬로 조회해서 최종 점수까지 계산.
+    """
+    def score_one(c):
+        val = get_stay_intensity(
+            area_cd=c.get("stat_area_code"),
+            signgu_cd=c.get("stat_sigungu_code"),
+        )
+        result = calculate_final_score(
+            spot=c,
+            theme_weights=theme_weights,
+            budget_level=budget_level,
+            stay_intensity_val=val,
+        )
+        c["score"] = result["final_score"]
+        return c
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        candidates = list(executor.map(score_one, candidates))
+
+    return candidates
+
+
 def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     """
     ⭐ 메인 함수 (세영님이 호출하는 진입점)
 
     입력: PreferenceInput (취향 가중치, 지역코드, 예산, 액티비티 강도 등)
     출력: RecommendationResult
-          - candidates: 여행지(앵커스팟) 후보 리스트 (상위 N개)
-          - 각 후보는 자기 정보 + 그 주변 추천 관광지 리스트(nearby_spots)를 함께 가짐
+          - candidates: 상위 N개 중 랜덤으로 뽑힌 여행지(앵커스팟) 1개
+          - 그 후보는 자기 정보 + 주변 추천 관광지 리스트(nearby_spots)를 함께 가짐
 
-    ⚠️ 랜덤 뽑기는 하지 않음 — 이 리스트를 세영님 쪽에서 DB에 저장하고
-       랜덤 선택/재뽑기를 처리하는 구조.
+    ⭐ 랜덤 뽑기까지 이 함수 안에서 처리함. 재뽑기가 필요하면
+       이 함수를 다시 호출하면 됨 (취향 계산부터 다시 하므로 결과가 새로 나옴).
     """
     # 1. 취향 가중치 정규화
     theme_weights = normalize_theme_weights(preference.theme_weights)
@@ -143,14 +173,8 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     if not candidates:
         return RecommendationResult(candidates=[])
 
-    # 5. 스코어링
-    for c in candidates:
-        result = calculate_final_score(
-            spot=c,
-            theme_weights=theme_weights,
-            budget_level=preference.budget_level,
-        )
-        c["score"] = result["final_score"]
+    # 5. 스코어링 (혼잡도 실제 API 값 반영, 병렬 처리)
+    candidates = enrich_with_demand_score(candidates, theme_weights, preference.budget_level)
 
     # 6. 근접 중복 제거 (같은 동네 후보 하나로 합치기)
     candidates = merge_nearby_duplicates(candidates)
@@ -190,4 +214,9 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
         )
         result_candidates.append(anchor)
 
-    return RecommendationResult(candidates=result_candidates)
+    # 9. 상위 N개 중 랜덤으로 1개 최종 선택
+    if not result_candidates:
+        return RecommendationResult(candidates=[])
+
+    selected = random.choice(result_candidates)
+    return RecommendationResult(candidates=[selected])
