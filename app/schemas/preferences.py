@@ -1,25 +1,35 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 
-Transport = Literal["CAR", "PUBLIC_TRANSIT"]
-TravelCompanion = Literal["solo", "group"]
+ThemeChoice = Literal["ocean", "nature"]
+MobilityChoice = Literal["walk_transit", "car"]
+CompanionChoice = Literal["solo", "group"]
+ActivityChoice = Literal["rest", "dynamic"]
 
 
 class PreferenceSaveRequest(BaseModel):
-    nature_score: int = 0
-    activity_score: int = 0
-    healing_score: int = 0
-    urban_score: int = 0
     ocean_score: int = 0
+    nature_score: int = 0
+    theme_choice: ThemeChoice | None = None
 
-    budget_level: int | None = Field(default=None, ge=1, le=3)
-    transport: Transport | None = None
-    activity_intensity: int | None = Field(default=None, ge=1, le=5)
-    travel_companion: TravelCompanion | None = None
-    indoor_preference: bool | None = None
+    walk_transit_score: int = 0
+    car_score: int = 0
+    mobility_choice: MobilityChoice | None = None
+
+    solo_score: int = 0
+    group_score: int = 0
+    companion_choice: CompanionChoice | None = None
+
+    rest_score: int = 0
+    dynamic_score: int = 0
+    activity_choice: ActivityChoice | None = None
+
+    outdoor_score: int = 0
+    indoor_score: int = 0
+    indoor_choice: bool | None = None
 
 
 class PreferenceResponse(PreferenceSaveRequest):
@@ -27,5 +37,4 @@ class PreferenceResponse(PreferenceSaveRequest):
     user_id: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
