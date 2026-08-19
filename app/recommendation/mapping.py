@@ -1,5 +1,6 @@
 CAT1_TO_THEME = {
     "A01": "nature",
+    "A02": "urban",
     "A03": "activity",
     "A04": "urban",
 }
@@ -43,7 +44,7 @@ THEME_TO_CAT1 = {
     "nature": ["A01"],
     "healing": ["A01"],
     "activity": ["A03"],
-    "urban": ["A04"],
+    "urban": ["A02", "A04"],
     "ocean": ["A01"],
 }
 

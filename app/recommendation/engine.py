@@ -89,35 +89,38 @@ def apply_infra_cutoff(candidates: list[dict]) -> list[dict]:
     return filtered
 
 
-def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
+def extract_region_name(address: str) -> str:
     """
-    3단계: 같은 시군구이면서 실제 거리도 가까운(MERGE_DISTANCE_KM 이내) 후보들 중
-    점수가 가장 높은 것만 대표로 남기고 나머지는 제거.
-    (예: '낙산도립공원'과 '낙산항'을 하나로 취급)
+    주소 문자열에서 "시/군 + 읍/면/동" 단위까지만 지역명을 추출.
+    시/군은 접미사를 떼고("양양군"->"양양"), 구는 접미사를 유지("강서구"->"강서구").
     """
-    sorted_candidates = sorted(candidates, key=lambda x: x["score"], reverse=True)
-    merged = []
+    parts = address.split()
 
-    for spot in sorted_candidates:
-        is_duplicate = False
-        for kept in merged:
-            same_sigungu = (
-                spot.get("sigungu_code")
-                and spot.get("sigungu_code") == kept.get("sigungu_code")
-            )
-            if same_sigungu:
-                distance = calculate_distance_km(
-                    spot["latitude"], spot["longitude"],
-                    kept["latitude"], kept["longitude"]
-                )
-                if distance <= MERGE_DISTANCE_KM:
-                    is_duplicate = True
-                    break
+    SKIP_SUFFIXES = ("특별시", "광역시", "특별자치시", "특별자치도", "도")
 
-        if not is_duplicate:
-            merged.append(spot)
+    sigungu = None
+    eupmyeondong = None
 
-    return merged
+    for part in parts:
+        if any(part.endswith(suffix) for suffix in SKIP_SUFFIXES):
+            continue
+
+        if sigungu is None and part.endswith("구"):
+            sigungu = part  # "구"는 그대로 유지 (예: "강서구")
+            continue
+        if sigungu is None and (part.endswith("시") or part.endswith("군")):
+            sigungu = part[:-1]  # "시/군"만 떼기 (예: "양양군" -> "양양")
+            continue
+        if sigungu is not None and (part.endswith("읍") or part.endswith("면") or part.endswith("동")):
+            eupmyeondong = part
+            break
+
+    if sigungu and eupmyeondong:
+        return f"{sigungu} {eupmyeondong}"
+    elif sigungu:
+        return sigungu
+    else:
+        return parts[1] if len(parts) > 1 else address
 
 
 def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int) -> list[dict]:
