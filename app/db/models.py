@@ -50,10 +50,7 @@ class PreferenceResult(Base):
     activity_score = Column(Integer, default=0)
     healing_score = Column(Integer, default=0)
     urban_score = Column(Integer, default=0)
-    food_score = Column(Integer, default=0)
-    history_score = Column(Integer, default=0)
     ocean_score = Column(Integer, default=0)   # 바다
-    forest_score = Column(Integer, default=0)  # 숲
 
     # 여행 조건
     budget_level = Column(Integer, nullable=True)         # 1(가성비) ~ 3(플렉스)

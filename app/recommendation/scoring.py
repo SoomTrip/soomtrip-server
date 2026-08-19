@@ -29,14 +29,21 @@ def calculate_diversity_score(nearby_count: int, max_reference: int = 100) -> fl
 
 # ── 지표 3: 혼잡도(수요강도) — 추후 API 연동 시 사용 ─────
 
-def calculate_crowd_score(demand_index: float = None) -> float:
+def calculate_crowd_score(stay_intensity_val: float = None) -> float:
     """
-    관광 수요 강도를 역점수로 변환 (낮을수록 좋은 점수).
-    demand_index: 0~100 범위의 수요강도 원본값 (API 미연동 시 None)
+    관광 체류 강도(1박 방문자수 관련 값)를 0~100 역점수로 변환.
+    값이 낮을수록(외지인 체류 적을수록) 덜 붐비는 곳으로 보고 높은 점수 부여.
+
+    ⚠️ 정확한 "혼잡도"는 아니고, 체류 강도를 붐빔의 근사치로 활용하는 것.
+    데이터가 없으면(API 실패, 매칭 안 됨 등) 중립값(50) 반환.
     """
-    if demand_index is None:
-        return 50.0  # 중립값
-    return round(100 - demand_index, 2)
+    if stay_intensity_val is None:
+        return 50.0
+
+    # 값의 실제 분포를 모르니, 우선 0~100 범위로 가정하고 역산
+    # (실제 서비스 운영하며 관찰한 값 범위로 추후 보정 필요)
+    normalized = min(max(stay_intensity_val, 0), 100)
+    return round(100 - normalized, 2)
 
 
 # ── 지표 4: 예산 매칭도 (단순 버전) ──────────────────────
@@ -62,17 +69,14 @@ def calculate_final_score(
     spot: dict,
     theme_weights: dict,
     budget_level: int = 2,
-    demand_index: float = None,
+    stay_intensity_val: float = None,
     score_weights: dict = None,
 ) -> dict:
-    """
-    지역 후보 하나의 최종 점수를 계산.
-    """
     weights = score_weights or DEFAULT_WEIGHTS
 
     theme_score = calculate_theme_score(spot, theme_weights)
     diversity_score = calculate_diversity_score(spot.get("nearby_count", 0))
-    crowd_score = calculate_crowd_score(demand_index)
+    crowd_score = calculate_crowd_score(stay_intensity_val)
     budget_score = calculate_budget_score(spot, budget_level)
 
     final_score = (

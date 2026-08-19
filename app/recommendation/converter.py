@@ -1,14 +1,27 @@
 import random
 from app.recommendation.schemas import PreferenceInput
-from app.recommendation.mapping import ALL_THEMES
+from app.recommendation.mapping import ALL_THEMES, COASTAL_AREA_CODES, INLAND_AREA_CODES
 
 
 INDOOR_WEIGHT_RATIO = 0.3
 
-ALL_AREA_CODES = [
-    "1", "2", "3", "4", "5", "6", "7", "8",
-    "31", "32", "33", "34", "35", "36", "37", "38", "39",
-]
+ALL_AREA_CODES = COASTAL_AREA_CODES + INLAND_AREA_CODES
+
+
+def get_area_pool(theme_weights: dict) -> list[str]:
+    """
+    사용자의 1순위 테마가 ocean이면 해안 지역만, 아니면 전체 지역에서 선택.
+    """
+    if not theme_weights:
+        return ALL_AREA_CODES
+
+    sorted_themes = sorted(theme_weights.items(), key=lambda x: x[1], reverse=True)
+    top_theme = sorted_themes[0][0] if sorted_themes else None
+
+    if top_theme == "ocean":
+        return COASTAL_AREA_CODES
+
+    return ALL_AREA_CODES
 
 
 def convert_worldcup_to_preference(
@@ -65,7 +78,12 @@ def convert_worldcup_to_preference(
     else:
         theme_weights["nature"] += boost
 
-    final_area_code = area_code or random.choice(ALL_AREA_CODES)
+    # area_code: 넘어온 값이 없으면, 취향에 맞는 지역 풀에서 랜덤 선택
+    if area_code:
+        final_area_code = area_code
+    else:
+        area_pool = get_area_pool(theme_weights)
+        final_area_code = random.choice(area_pool)
 
     return PreferenceInput(
         theme_weights=theme_weights,
