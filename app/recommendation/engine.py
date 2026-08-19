@@ -123,10 +123,7 @@ def extract_region_name(address: str) -> str:
         return parts[1] if len(parts) > 1 else address
 
 
-def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int) -> list[dict]:
-    """
-    각 후보에 혼잡도 API를 병렬로 조회해서 최종 점수까지 계산.
-    """
+def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int, indoor_choice: bool = None) -> list[dict]:
     def score_one(c):
         val = get_stay_intensity(
             area_cd=c.get("stat_area_code"),
@@ -137,6 +134,7 @@ def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget
             theme_weights=theme_weights,
             budget_level=budget_level,
             stay_intensity_val=val,
+            indoor_choice=indoor_choice,
         )
         c["score"] = result["final_score"]
         return c
@@ -176,8 +174,10 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     if not candidates:
         return RecommendationResult(candidates=[])
 
-    # 5. 스코어링 (혼잡도 실제 API 값 반영, 병렬 처리)
-    candidates = enrich_with_demand_score(candidates, theme_weights, preference.budget_level)
+    # 5. 스코어링 (혼잡도 + 실내/실외 매칭 반영)
+    candidates = enrich_with_demand_score(
+        candidates, theme_weights, preference.budget_level, preference.indoor_choice
+    )
 
     # 6. 근접 중복 제거 (같은 동네 후보 하나로 합치기)
     candidates = merge_nearby_duplicates(candidates)
