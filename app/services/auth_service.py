@@ -1,7 +1,10 @@
 import httpx
+from sqlalchemy.orm import Session
 
-# 사용자 정보 조회를 위한 카카오 API url
+from app.db.models import User
+
 KAKAO_USER_INFO_URL = "https://kapi.kakao.com/v2/user/me"
+
 
 async def get_kakao_user(kakao_access_token: str) -> dict:
     headers = {
@@ -18,19 +21,46 @@ async def get_kakao_user(kakao_access_token: str) -> dict:
 
     return response.json()
 
-'''
-코드가 하는 일
-프론트가 보내준 카카오 토큰이
-abc123...이면 
-headers = {
-    "Authorization": "Bearer abc123..."
-} 를 만들어서 카카오에 요청한다
-카카오가 토큰을 정상적으로 인정하면 사용자 데이터 반환
-{
-  "id": 123456789, <- 이건 카카오 서비스 사용자 ID
-  "connected_at": "...",
-  "properties": {},
-  "kakao_account": {}
-}
-카카오 서비스 사용자 id를 이용하여 DB 조회를 하여 기존회원인지 아닌지 판단
-'''
+
+def get_or_create_user_by_kakao(
+    db: Session,
+    kakao_user: dict,
+) -> User:
+    kakao_id = str(kakao_user["id"])
+
+    user = (
+        db.query(User)
+        .filter(User.kakao_id == kakao_id)
+        .first()
+    )
+
+    if user is not None:
+        return user
+
+    properties = kakao_user.get("properties") or {}
+    kakao_account = kakao_user.get("kakao_account") or {}
+    profile = kakao_account.get("profile") or {}
+
+    nickname = (
+        properties.get("nickname")
+        or profile.get("nickname")
+        or f"user_{kakao_id}"
+    )
+
+    profile_image = (
+        properties.get("profile_image")
+        or profile.get("profile_image_url")
+    )
+
+    user = User(
+        kakao_id=kakao_id,
+        nickname=nickname,
+        profile_image=profile_image,
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
