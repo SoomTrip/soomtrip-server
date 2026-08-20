@@ -19,7 +19,8 @@ from app.recommendation.schemas import (
 
 
 MIN_NEARBY_SPOTS = 5       # 최소 인프라 커트라인
-NEARBY_RADIUS = 3000       # 주변 스팟 조회 반경(m)
+NEARBY_RADIUS_WALK = 2000  # 뚜벅이: 1.5km
+NEARBY_RADIUS_CAR = 5000   # 자차: 5km
 NEARBY_FETCH_LIMIT = 100   # 주변 스팟 조회 시 최대 개수
 TOP_N = 10                 # 최종 앵커스팟 후보 개수
 MERGE_DISTANCE_KM = 5.0    # 같은 시군구일 때 병합 판단 거리(km)
@@ -57,11 +58,16 @@ def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -
     return candidates
 
 
-def apply_infra_cutoff(candidates: list[dict]) -> list[dict]:
+def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> list[dict]:
     """
     반경 내 연관 스팟이 너무 적은 후보를 제거.
+    이동수단에 따라 조회 반경을 다르게 적용:
+    - 뚜벅이(walk_transit): 좁은 반경(1.5km)
+    - 자차(car) 또는 미지정: 넓은 반경(5km)
     병렬로 API 호출해서 속도 개선.
     """
+    radius = NEARBY_RADIUS_WALK if mobility_choice == "walk_transit" else NEARBY_RADIUS_CAR
+
     def fetch_nearby(spot):
         if spot["latitude"] is None or spot["longitude"] is None:
             return None
@@ -69,7 +75,7 @@ def apply_infra_cutoff(candidates: list[dict]) -> list[dict]:
         nearby_raw = get_location_based_list(
             map_x=spot["longitude"],
             map_y=spot["latitude"],
-            radius=NEARBY_RADIUS,
+            radius=radius,
             num_of_rows=NEARBY_FETCH_LIMIT,
         )
 
@@ -123,6 +129,37 @@ def extract_region_name(address: str) -> str:
         return parts[1] if len(parts) > 1 else address
 
 
+def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
+    """
+    같은 시군구이면서 실제 거리도 가까운(MERGE_DISTANCE_KM 이내) 후보들 중
+    점수가 가장 높은 것만 대표로 남기고 나머지는 제거.
+    (예: '낙산도립공원'과 '낙산항'을 하나로 취급)
+    """
+    sorted_candidates = sorted(candidates, key=lambda x: x["score"], reverse=True)
+    merged = []
+
+    for spot in sorted_candidates:
+        is_duplicate = False
+        for kept in merged:
+            same_sigungu = (
+                spot.get("sigungu_code")
+                and spot.get("sigungu_code") == kept.get("sigungu_code")
+            )
+            if same_sigungu:
+                distance = calculate_distance_km(
+                    spot["latitude"], spot["longitude"],
+                    kept["latitude"], kept["longitude"]
+                )
+                if distance <= MERGE_DISTANCE_KM:
+                    is_duplicate = True
+                    break
+
+        if not is_duplicate:
+            merged.append(spot)
+
+    return merged
+
+
 def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int, indoor_choice: bool = None) -> list[dict]:
     def score_one(c):
         val = get_stay_intensity(
@@ -168,8 +205,8 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     # 3. 앵커스팟 후보 수집
     candidates = get_candidate_regions(preference.area_code, theme_weights)
 
-    # 4. 인프라 컷오프 (+ 주변 관광지 리스트 확보)
-    candidates = apply_infra_cutoff(candidates)
+    # 4. 인프라 컷오프 (+ 주변 관광지 리스트 확보) — 이동수단에 따라 반경 다르게
+    candidates = apply_infra_cutoff(candidates, preference.mobility_choice)
 
     if not candidates:
         return RecommendationResult(candidates=[])
@@ -186,9 +223,20 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     candidates.sort(key=lambda x: x["score"], reverse=True)
     top_candidates = candidates[:TOP_N]
 
-    # 8. 출력 스키마로 변환 (앵커스팟 + 주변 관광지 리스트)
+    # 8. 출력 스키마로 변환 (지역명 + 앵커스팟 포함 주변 관광지 리스트)
     result_candidates = []
     for c in top_candidates:
+        # 앵커스팟도 관광지 리스트의 일부로 포함
+        anchor_spot = NearbySpot(
+            content_id=c["id"],
+            name=c["name"],           # 앵커스팟은 원래 이름(관광지명) 그대로 유지
+            address=c["address"],
+            latitude=c["latitude"],
+            longitude=c["longitude"],
+            image_url=c.get("image_url"),
+            cat1=c.get("cat1"),
+        )
+
         nearby_spots = [
             NearbySpot(
                 content_id=n["id"],
@@ -203,9 +251,11 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
             if n["latitude"] is not None and n["longitude"] is not None
         ]
 
+        all_spots = [anchor_spot] + nearby_spots
+
         anchor = AnchorSpotCandidate(
             content_id=c["id"],
-            name=c["name"],
+            name=extract_region_name(c["address"]),   # ⭐ 지역명으로 변경
             address=c["address"],
             latitude=c["latitude"],
             longitude=c["longitude"],
@@ -213,7 +263,7 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
             cat1=c.get("cat1"),
             score=c["score"],
             nearby_count=c.get("nearby_count", 0),
-            nearby_spots=nearby_spots,
+            nearby_spots=all_spots,   # ⭐ 앵커스팟도 포함된 전체 리스트
         )
         result_candidates.append(anchor)
 
