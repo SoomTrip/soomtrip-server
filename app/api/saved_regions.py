@@ -7,6 +7,7 @@ from app.schemas.saved_regions import SavedRegionCreateRequest, SavedRegionRespo
 from app.services.saved_region_service import (
     create_saved_region,
     delete_saved_region,
+    get_my_saved_region_by_id,
     get_my_saved_regions,
 )
 
@@ -31,6 +32,27 @@ def get_saved_regions(
     db: Session = Depends(get_db),
 ):
     return get_my_saved_regions(db, current_user_id)
+
+
+@router.get("/{saved_region_id}", response_model=SavedRegionResponse)
+def get_saved_region(
+    saved_region_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    saved_region = get_my_saved_region_by_id(
+        db=db,
+        user_id=current_user_id,
+        saved_region_id=saved_region_id,
+    )
+
+    if saved_region is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="저장된 여행지를 찾을 수 없습니다.",
+        )
+
+    return saved_region
 
 
 @router.delete("/{saved_region_id}", status_code=status.HTTP_204_NO_CONTENT)
