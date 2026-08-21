@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict
 class SavedRegionSpotCreateRequest(BaseModel):
     content_id: str
     name: str
+    latitude: float | None = None
+    longitude: float | None = None
     is_anchor: bool = False
 
 
@@ -19,6 +21,8 @@ class SavedRegionSpotResponse(BaseModel):
     id: int
     content_id: str
     name: str
+    latitude: float | None = None
+    longitude: float | None = None
     is_anchor: bool
 
     model_config = ConfigDict(from_attributes=True)
