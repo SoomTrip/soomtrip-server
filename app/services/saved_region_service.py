@@ -20,6 +20,8 @@ def create_saved_region(
             SavedRegionSpot(
                 content_id=spot.content_id,
                 name=spot.name,
+                latitude=spot.latitude,
+                longitude=spot.longitude,
                 is_anchor=spot.is_anchor,
             )
         )
