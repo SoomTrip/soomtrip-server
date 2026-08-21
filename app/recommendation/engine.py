@@ -61,12 +61,12 @@ def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -
 def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> list[dict]:
     """
     반경 내 연관 스팟이 너무 적은 후보를 제거.
-    이동수단에 따라 조회 반경을 다르게 적용:
-    - 뚜벅이(walk_transit): 좁은 반경(1.5km)
-    - 자차(car) 또는 미지정: 넓은 반경(5km)
-    병렬로 API 호출해서 속도 개선.
+    이동수단에 따라 조회 반경을 다르게 적용.
+    숙박(B02) 카테고리는 주변 관광지 리스트에서 제외.
     """
     radius = NEARBY_RADIUS_WALK if mobility_choice == "walk_transit" else NEARBY_RADIUS_CAR
+
+    EXCLUDED_CAT1 = ["B02"]  # 숙박 제외
 
     def fetch_nearby(spot):
         if spot["latitude"] is None or spot["longitude"] is None:
@@ -78,6 +78,12 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
             radius=radius,
             num_of_rows=NEARBY_FETCH_LIMIT,
         )
+
+        # ⭐ 숙박(B02) 제외 필터링
+        nearby_raw = [
+            n for n in nearby_raw
+            if n.get("cat1") not in EXCLUDED_CAT1
+        ]
 
         if len(nearby_raw) >= MIN_NEARBY_SPOTS:
             spot["nearby_count"] = len(nearby_raw)
@@ -93,7 +99,6 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
         filtered = [r for r in results if r is not None]
 
     return filtered
-
 
 def extract_region_name(address: str) -> str:
     """
