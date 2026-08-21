@@ -59,3 +59,25 @@ def get_my_preference_result_by_id(
         )
         .first()
     )
+
+def delete_my_preference_result(
+    db: Session,
+    user_id: int,
+    preference_id: int,
+) -> bool:
+    preference_result = (
+        db.query(PreferenceResult)
+        .filter(
+            PreferenceResult.id == preference_id,
+            PreferenceResult.user_id == user_id,
+        )
+        .first()
+    )
+
+    if preference_result is None:
+        return False
+
+    db.delete(preference_result)
+    db.commit()
+
+    return True
