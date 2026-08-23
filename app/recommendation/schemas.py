@@ -21,6 +21,7 @@ class NearbySpot(BaseModel):
     longitude: float
     image_url: Optional[str] = None
     cat1: Optional[str] = None
+    category_label: Optional[str] = None
 
 
 class AnchorSpotCandidate(BaseModel):

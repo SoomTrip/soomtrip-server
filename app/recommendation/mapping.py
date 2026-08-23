@@ -51,6 +51,16 @@ THEME_TO_CAT1 = {
     "ocean": ["A01"],
 }
 
+CAT1_LABELS = {
+    "A01" : "자연",
+    "A02" : "문화시설",
+    "A03" : "레포츠",
+    "A04" : "쇼핑",
+}
+
+CAT3_LABELS = {
+    "A05020900" : "카페",
+}
 
 def get_theme_from_cat3(cat1: str, cat3: str) -> str:
     """
@@ -64,6 +74,16 @@ def get_theme_from_cat3(cat1: str, cat3: str) -> str:
         return "ocean"
     return "nature"
 
+def get_category_label(cat1: str, cat3: str = None) -> str:
+    """
+    cat1(대분류)/cat3(소분류) 코드를 사람이 읽을 수 있는 카테고리명으로 변환.
+    카페만 소분류로 세분화하고, 나머지 음식점은 "식당"으로 통일.
+    """
+    if cat3 == "A05020900":
+        return "카페"
+    if cat1 == "A05":
+        return "식당"
+    return CAT1_LABELS.get(cat1, "기타")
 
 THEME_TO_CONTENT_TYPE = {
     "nature": "12",
