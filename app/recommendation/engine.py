@@ -3,7 +3,7 @@ import concurrent.futures
 from app.external.tour_api.client import get_area_based_list, get_location_based_list
 from app.external.tour_api.schemas import normalize_tour_item
 from app.external.demand_api.client import get_stay_intensity
-from app.recommendation.mapping import THEME_TO_CAT1, THEME_TO_CONTENT_TYPE
+from app.recommendation.mapping import THEME_TO_CAT1, THEME_TO_CONTENT_TYPE, get_category_label
 from app.recommendation.scoring import (
     calculate_final_score,
     normalize_theme_weights,
@@ -240,6 +240,7 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
             longitude=c["longitude"],
             image_url=c.get("image_url"),
             cat1=c.get("cat1"),
+            category_label=get_category_label(c.get("cat1"), c.get("cat3")),
         )
 
         nearby_spots = [
@@ -251,6 +252,7 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
                 longitude=n["longitude"],
                 image_url=n.get("image_url"),
                 cat1=n.get("cat1"),
+                category_label=get_category_label(n.get("cat1"), n.get("cat3")),
             )
             for n in c.get("nearby_spots", [])
             if n["latitude"] is not None and n["longitude"] is not None
