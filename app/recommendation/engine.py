@@ -19,7 +19,7 @@ from app.recommendation.schemas import (
 
 
 MIN_NEARBY_SPOTS = 5       # 최소 인프라 커트라인
-NEARBY_RADIUS_WALK = 2000  # 뚜벅이: 1.5km
+NEARBY_RADIUS_WALK = 2000  # 뚜벅이: 2km
 NEARBY_RADIUS_CAR = 5000   # 자차: 5km
 NEARBY_FETCH_LIMIT = 100   # 주변 스팟 조회 시 최대 개수
 TOP_N = 10                 # 최종 앵커스팟 후보 개수
@@ -47,13 +47,17 @@ def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -
                 continue  # 중복 호출 방지
             seen_combinations.add(combo)
 
-            items = get_area_based_list(
-                area_code=area_code,
-                cat1=cat1,
-                content_type_id=content_type_id,
-                num_of_rows=50,
-            )
-            candidates.extend([normalize_tour_item(i) for i in items])
+            try:
+                items = get_area_based_list(
+                    area_code=area_code,
+                    cat1=cat1,
+                    content_type_id=content_type_id,
+                    num_of_rows=50,
+                )
+                candidates.extend([normalize_tour_item(i) for i in items])
+            except Exception:
+                # 이 카테고리 조회만 실패, 다른 카테고리는 계속 진행
+                continue
 
     return candidates
 
@@ -63,21 +67,25 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
     반경 내 연관 스팟이 너무 적은 후보를 제거.
     이동수단에 따라 조회 반경을 다르게 적용.
     숙박(B02) 카테고리는 주변 관광지 리스트에서 제외.
+    개별 API 호출 실패 (타임아웃, 429 등)는 그 후보만 제외하고 계속 진행.
     """
     radius = NEARBY_RADIUS_WALK if mobility_choice == "walk_transit" else NEARBY_RADIUS_CAR
-
     EXCLUDED_CAT1 = ["B02"]  # 숙박 제외
 
     def fetch_nearby(spot):
         if spot["latitude"] is None or spot["longitude"] is None:
             return None
 
-        nearby_raw = get_location_based_list(
-            map_x=spot["longitude"],
-            map_y=spot["latitude"],
-            radius=radius,
-            num_of_rows=NEARBY_FETCH_LIMIT,
-        )
+        try:
+            nearby_raw = get_location_based_list(
+                map_x=spot["longitude"],
+                map_y=spot["latitude"],
+                radius=radius,
+                num_of_rows=NEARBY_FETCH_LIMIT,
+            )
+        except Exception:
+            # 이 후보 하나만 실패 처리, 전체는 게속 진행
+            return None
 
         # ⭐ 숙박(B02) 제외 필터링
         nearby_raw = [
@@ -94,9 +102,16 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
             return spot
         return None
 
+    filtered = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        results = executor.map(fetch_nearby, candidates)
-        filtered = [r for r in results if r is not None]
+        futures = [executor.submit(fetch_nearby, spot) for spot in candidates]
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                result = future.result()
+                if result is not None:
+                    filtered.append(result)
+            except Exception:
+                continue  # 개별 실패는 건너뜀
 
     return filtered
 
@@ -200,19 +215,29 @@ def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
 
 
 def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int, indoor_choice: bool = None) -> list[dict]:
+    """
+    혼잡도 API 호출 실패 시 중립값으로 처리하고 계속 진행
+    """
     def score_one(c):
-        val = get_stay_intensity(
-            area_cd=c.get("stat_area_code"),
-            signgu_cd=c.get("stat_sigungu_code"),
-        )
-        result = calculate_final_score(
-            spot=c,
-            theme_weights=theme_weights,
-            budget_level=budget_level,
-            stay_intensity_val=val,
-            indoor_choice=indoor_choice,
-        )
-        c["score"] = result["final_score"]
+        try:
+            val = get_stay_intensity(
+                area_cd=c.get("stat_area_code"),
+                signgu_cd=c.get("stat_sigungu_code"),
+            )
+        except Exception:
+            val = None # 실패하면 calculate_crowd_score가 자동으로 중립값
+        try:
+            result = calculate_final_score(
+                spot=c,
+                theme_weights=theme_weights,
+                budget_level=budget_level,
+                stay_intensity_val=val,
+                indoor_choice=indoor_choice,
+            )
+            c["score"] = result["final_score"]
+        except Exception:
+            c["score"] = 0.0 # 스코어링 자체가 실패하면 최하점 처리(후보에서 자연스럽게 밀려남)
+
         return c
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -223,94 +248,100 @@ def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget
 
 def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     """
-    ⭐ 메인 함수 (세영님이 호출하는 진입점)
-
     입력: PreferenceInput (취향 가중치, 지역코드, 예산, 액티비티 강도 등)
     출력: RecommendationResult
           - candidates: 상위 N개 중 랜덤으로 뽑힌 여행지(앵커스팟) 1개
           - 그 후보는 자기 정보 + 주변 추천 관광지 리스트(nearby_spots)를 함께 가짐
 
-    ⭐ 랜덤 뽑기까지 이 함수 안에서 처리함. 재뽑기가 필요하면
-       이 함수를 다시 호출하면 됨 (취향 계산부터 다시 하므로 결과가 새로 나옴).
+    랜덤 뽑기까지 이 함수 안에서 처리함. 재뽑기가 필요하면
+    이 함수를 다시 호출하면 됨 (취향 계산부터 다시 하므로 결과가 새로 나옴).
+
+    RecommendationResult(candidates=[])를 반환해서 호출자가 500 에러 대신 "결과없음"으로
+    처리할 수 있게 함.
     """
-    # 1. 취향 가중치 정규화
-    theme_weights = normalize_theme_weights(preference.theme_weights)
+    try:
+        # 1. 취향 가중치 정규화
+        theme_weights = normalize_theme_weights(preference.theme_weights)
 
-    # 2. 휴식/액티비티 선호도로 가중치 추가 보정
-    theme_weights = adjust_weights_by_activity_intensity(
-        theme_weights, preference.activity_intensity
-    )
-
-    # 3. 앵커스팟 후보 수집
-    candidates = get_candidate_regions(preference.area_code, theme_weights)
-
-    # 4. 인프라 컷오프 (+ 주변 관광지 리스트 확보) — 이동수단에 따라 반경 다르게
-    candidates = apply_infra_cutoff(candidates, preference.mobility_choice)
-
-    if not candidates:
-        return RecommendationResult(candidates=[])
-
-    # 5. 스코어링 (혼잡도 + 실내/실외 매칭 반영)
-    candidates = enrich_with_demand_score(
-        candidates, theme_weights, preference.budget_level, preference.indoor_choice
-    )
-
-    # 6. 근접 중복 제거 (같은 동네 후보 하나로 합치기)
-    candidates = merge_nearby_duplicates(candidates)
-
-    # 7. 점수 높은 순 정렬 후 상위 N개만 추리기
-    candidates.sort(key=lambda x: x["score"], reverse=True)
-    top_candidates = candidates[:TOP_N]
-
-    # 8. 출력 스키마로 변환 (지역명 + 앵커스팟 포함 주변 관광지 리스트)
-    result_candidates = []
-    for c in top_candidates:
-        # 앵커스팟도 관광지 리스트의 일부로 포함
-        anchor_spot = NearbySpot(
-            content_id=c["id"],
-            name=c["name"],           # 앵커스팟은 원래 이름(관광지명) 그대로 유지
-            address=c["address"],
-            latitude=c["latitude"],
-            longitude=c["longitude"],
-            image_url=c.get("image_url"),
-            cat1=c.get("cat1"),
-            category_label=get_category_label(c.get("cat1"), c.get("cat3")),
+        # 2. 휴식/액티비티 선호도로 가중치 추가 보정
+        theme_weights = adjust_weights_by_activity_intensity(
+            theme_weights, preference.activity_intensity
         )
 
-        nearby_spots = [
-            NearbySpot(
-                content_id=n["id"],
-                name=n["name"],
-                address=n["address"],
-                latitude=n["latitude"],
-                longitude=n["longitude"],
-                image_url=n.get("image_url"),
-                cat1=n.get("cat1"),
-                category_label=get_category_label(n.get("cat1"), n.get("cat3")),
+        # 3. 앵커스팟 후보 수집
+        candidates = get_candidate_regions(preference.area_code, theme_weights)
+
+        # 4. 인프라 컷오프 (+ 주변 관광지 리스트 확보) — 이동수단에 따라 반경 다르게
+        candidates = apply_infra_cutoff(candidates, preference.mobility_choice)
+
+        if not candidates:
+            return RecommendationResult(candidates=[])
+
+        # 5. 스코어링 (혼잡도 + 실내/실외 매칭 반영)
+        candidates = enrich_with_demand_score(
+            candidates, theme_weights, preference.budget_level, preference.indoor_choice
+        )
+
+        # 6. 근접 중복 제거 (같은 동네 후보 하나로 합치기)
+        candidates = merge_nearby_duplicates(candidates)
+
+        # 7. 점수 높은 순 정렬 후 상위 N개만 추리기
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        top_candidates = candidates[:TOP_N]
+
+        # 8. 출력 스키마로 변환 (지역명 + 앵커스팟 포함 주변 관광지 리스트)
+        result_candidates = []
+        for c in top_candidates:
+            # 앵커스팟도 관광지 리스트의 일부로 포함
+            anchor_spot = NearbySpot(
+                content_id=c["id"],
+                name=c["name"],           # 앵커스팟은 원래 이름(관광지명) 그대로 유지
+                address=c["address"],
+                latitude=c["latitude"],
+                longitude=c["longitude"],
+                image_url=c.get("image_url"),
+                cat1=c.get("cat1"),
+                category_label=get_category_label(c.get("cat1"), c.get("cat3")),
             )
-            for n in c.get("nearby_spots", [])
-            if n["latitude"] is not None and n["longitude"] is not None
-        ]
 
-        all_spots = [anchor_spot] + nearby_spots
+            nearby_spots = [
+                NearbySpot(
+                    content_id=n["id"],
+                    name=n["name"],
+                    address=n["address"],
+                    latitude=n["latitude"],
+                    longitude=n["longitude"],
+                    image_url=n.get("image_url"),
+                    cat1=n.get("cat1"),
+                    category_label=get_category_label(n.get("cat1"), n.get("cat3")),
+                )
+                for n in c.get("nearby_spots", [])
+                if n["latitude"] is not None and n["longitude"] is not None
+            ]
 
-        anchor = AnchorSpotCandidate(
-            content_id=c["id"],
-            name=extract_region_name(c["address"]),   # ⭐ 지역명으로 변경
-            address=c["address"],
-            latitude=c["latitude"],
-            longitude=c["longitude"],
-            image_url=c.get("image_url"),
-            cat1=c.get("cat1"),
-            score=c["score"],
-            nearby_count=c.get("nearby_count", 0),
-            nearby_spots=all_spots,   # ⭐ 앵커스팟도 포함된 전체 리스트
-        )
-        result_candidates.append(anchor)
+            all_spots = [anchor_spot] + nearby_spots
 
-    # 9. 상위 N개 중 랜덤으로 1개 최종 선택
-    if not result_candidates:
+            anchor = AnchorSpotCandidate(
+                content_id=c["id"],
+                name=extract_region_name(c["address"]),   # ⭐ 지역명으로 변경
+                address=c["address"],
+                latitude=c["latitude"],
+                longitude=c["longitude"],
+                image_url=c.get("image_url"),
+                cat1=c.get("cat1"),
+                score=c["score"],
+                nearby_count=c.get("nearby_count", 0),
+                nearby_spots=all_spots,   # ⭐ 앵커스팟도 포함된 전체 리스트
+            )
+            result_candidates.append(anchor)
+
+        # 9. 상위 N개 중 랜덤으로 1개 최종 선택
+        if not result_candidates:
+            return RecommendationResult(candidates=[])
+
+        selected = random.choice(result_candidates)
+        return RecommendationResult(candidates=[selected])
+    except Exception as e:
+        # 예상 못 한 에러가 나도 서버 전체가 죽지 않고, 빈 결과로 안전하게 반환
+        print(f"[get_recommendations] 예상치 못한 에러 발생: {e}")
         return RecommendationResult(candidates=[])
-
-    selected = random.choice(result_candidates)
-    return RecommendationResult(candidates=[selected])
