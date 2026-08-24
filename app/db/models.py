@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Text, Enum, Float
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Text, Enum, Float, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.session import Base
@@ -104,3 +104,26 @@ class SavedRegionSpot(Base):
 
 
     saved_region = relationship("SavedRegion", back_populates="spots")
+
+
+class DiaryEntry(Base):
+    """여행지에 대한 그림일기 (타임캡슐)"""
+    __tablename__ = "diary_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)  # 어느 여행지에 대한 기록인지
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)                   # 누가 작성했는지
+
+    message = Column(Text, nullable=True)            # 일기 텍스트 내용
+    image_url = Column(String, nullable=True)          # Storage에 업로드된 이미지(사진 또는 손그림) URL
+    entry_type = Column(String, default="photo")        # "photo"(사진) 또는 "drawing"(손그림) 구분
+
+    visit_start_date = Column(Date, nullable=False)      # 여행 시작일
+    visit_end_date = Column(Date, nullable=True)          # 여행 종료일 (당일치기면 비워두거나 시작일과 같게)
+
+    is_public = Column(Boolean, default=True)             # 다음 방문자에게 공개할지 여부
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 이 일기를 등록한 시각(자동)
+
+    user = relationship("User")
+    saved_region = relationship("SavedRegion")
