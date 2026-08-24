@@ -97,8 +97,10 @@ class SavedRegionSpot(Base):
     saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)
     content_id = Column(String, nullable=False)      # TourAPI contentId (실시간 재조회용)
     name = Column(String, nullable=False)             # 화면 표시용 이름 (캐시 목적)
+    category_label = Column(String, nullable=True)     # 관광지 카테고리
     latitude = Column(Float, nullable=True)           # 지도 링크 생성용
     longitude = Column(Float, nullable=True)           # 지도 링크 생성용
     is_anchor = Column(Boolean, default=False)         # 앵커스팟(대표 관광지) 여부
+
 
     saved_region = relationship("SavedRegion", back_populates="spots")
