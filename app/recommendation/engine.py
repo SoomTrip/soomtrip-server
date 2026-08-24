@@ -102,36 +102,70 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
 
 def extract_region_name(address: str) -> str:
     """
-    주소 문자열에서 "시/군 + 읍/면/동" 단위까지만 지역명을 추출.
-    시/군은 접미사를 떼고("양양군"->"양양"), 구는 접미사를 유지("강서구"->"강서구").
+    광역시/특별시는 이름만(부산, 서울) 남기고, 일반 도는 생략.
+    제주는 제주시는 그대로, 서귀포시는 "제주 서귀포시"로 구분.
+    - 구가 있는 경우(창원시 진해구, 부산 남구): 구까지만
+    - 구가 없는 경우(양양군, 순천시): 너무 넓으므로 읍/면/동까지 포함
     """
     parts = address.split()
 
-    SKIP_SUFFIXES = ("특별시", "광역시", "특별자치시", "특별자치도", "도")
+    KEEP_SIDO_PREFIXES = ("특별시", "광역시")
+    JEJU_NAME = "제주특별자치도"
+    SKIP_SIDO_SUFFIXES = ("도",)
 
-    sigungu = None
+    sido = None
+    is_jeju = False
+    si = None
+    gu = None
+    gun = None
     eupmyeondong = None
 
     for part in parts:
-        if any(part.endswith(suffix) for suffix in SKIP_SUFFIXES):
+        if sido is None and part == JEJU_NAME:
+            is_jeju = True
+            continue
+        if sido is None and any(part.endswith(suffix) for suffix in KEEP_SIDO_PREFIXES):
+            for suffix in KEEP_SIDO_PREFIXES:
+                if part.endswith(suffix):
+                    sido = part[: -len(suffix)]
+                    break
+            continue
+        if any(part.endswith(suffix) for suffix in SKIP_SIDO_SUFFIXES):
             continue
 
-        if sigungu is None and part.endswith("구"):
-            sigungu = part  # "구"는 그대로 유지 (예: "강서구")
+        if si is None and gu is None and gun is None and part.endswith("시"):
+            if is_jeju and part == "제주시":
+                si = "제주시"   # ⭐ 제주시는 그대로 유지
+            elif is_jeju:
+                si = "제주 " + part   # 서귀포시는 "제주 서귀포시"
+            else:
+                si = part[:-1]
             continue
-        if sigungu is None and (part.endswith("시") or part.endswith("군")):
-            sigungu = part[:-1]  # "시/군"만 떼기 (예: "양양군" -> "양양")
+        if gu is None and gun is None and part.endswith("구"):
+            gu = part
             continue
-        if sigungu is not None and (part.endswith("읍") or part.endswith("면") or part.endswith("동")):
+        if gu is None and gun is None and part.endswith("군"):
+            gun = part[:-1]
+            continue
+
+        if gu is None and (si is not None or gun is not None) and (
+            part.endswith("읍") or part.endswith("면") or part.endswith("동")
+        ):
             eupmyeondong = part
             break
 
-    if sigungu and eupmyeondong:
-        return f"{sigungu} {eupmyeondong}"
-    elif sigungu:
-        return sigungu
+    if gu is not None:
+        sigungu_parts = [p for p in [si, gu] if p]
+        sigungu = " ".join(sigungu_parts) if sigungu_parts else None
+        result_parts = [p for p in [sido, sigungu] if p]
+    elif gun is not None:
+        result_parts = [gun, eupmyeondong] if eupmyeondong else [gun]
     else:
-        return parts[1] if len(parts) > 1 else address
+        result_parts = [si, eupmyeondong] if eupmyeondong else [si]
+
+    if result_parts:
+        return " ".join(p for p in result_parts if p)
+    return parts[1] if len(parts) > 1 else address
 
 
 def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
