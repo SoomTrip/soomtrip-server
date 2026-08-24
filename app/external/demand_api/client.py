@@ -8,8 +8,8 @@ load_dotenv()
 DEMAND_API_KEY = os.getenv("TOUR_API_KEY")  # 관광공사 API는 보통 같은 인증키 공용
 DEMAND_BASE_URL = "https://apis.data.go.kr/B551011/AreaTarDemDsService"
 
-# "1박 방문자수" 지표 코드 (Swagger에서 확인한 값)
-TAR_SJRN_DS_IX_CD = "2103"
+# "타권역 방문자 비중" 지표 코드 (Swagger에서 확인한 값)
+TAR_SJRN_DS_IX_CD = "2101"
 
 
 def get_recent_base_ym() -> str:
