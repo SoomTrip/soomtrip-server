@@ -170,7 +170,7 @@ def extract_region_name(address: str) -> str:
             eupmyeondong = part
             break
 
-        # ⭐ 동/읍/면을 아직 못 찾았고, "로" 또는 "길"로 끝나는 도로명이면 백업으로 저장
+        # 동/읍/면을 아직 못 찾았고, "로" 또는 "길"로 끝나는 도로명이면 백업으로 저장
         if road is None and (si is not None or gun is not None) and (
             part.endswith("로") or part.endswith("길")
         ):
@@ -181,10 +181,10 @@ def extract_region_name(address: str) -> str:
         sigungu = " ".join(sigungu_parts) if sigungu_parts else None
         result_parts = [p for p in [sido, sigungu] if p]
     elif gun is not None:
-        detail = eupmyeondong or road  # ⭐ 동/읍/면 없으면 도로명이라도 사용
+        detail = eupmyeondong or road  # 동/읍/면 없으면 도로명이라도 사용
         result_parts = [gun, detail] if detail else [gun]
     else:
-        detail = eupmyeondong or road  # ⭐ 동/읍/면 없으면 도로명이라도 사용
+        detail = eupmyeondong or road  # 동/읍/면 없으면 도로명이라도 사용
         result_parts = [si, detail] if detail else [si]
 
     if result_parts:
