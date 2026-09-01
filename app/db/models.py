@@ -114,12 +114,12 @@ class DiaryEntry(Base):
     saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)  # 어느 여행지에 대한 기록인지
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)                   # 누가 작성했는지
 
+    title = Column(Text, nullable=True)
     message = Column(Text, nullable=True)            # 일기 텍스트 내용
-    image_url = Column(String, nullable=True)          # Storage에 업로드된 이미지(사진 또는 손그림) URL
-    entry_type = Column(String, default="photo")        # "photo"(사진) 또는 "drawing"(손그림) 구분
+    image_url = Column(String, nullable=True)          # Storage에 업로드된 이미지 URL
+    weather = Column(String, nullable=True)             # 날씨 (sunny, cloudy, rainy, snowy)
 
-    visit_start_date = Column(Date, nullable=False)      # 여행 시작일
-    visit_end_date = Column(Date, nullable=True)          # 여행 종료일 (당일치기면 비워두거나 시작일과 같게)
+    date = Column(Date, nullable=False)      # 여행일
 
     is_public = Column(Boolean, default=True)             # 다음 방문자에게 공개할지 여부
 
