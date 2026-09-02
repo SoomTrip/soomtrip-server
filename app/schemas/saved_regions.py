@@ -39,3 +39,21 @@ class SavedRegionResponse(BaseModel):
     spots: list[SavedRegionSpotResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+class SavedRegionShareRequest(BaseModel):
+    friend_user_ids: list[int]
+
+
+class SavedRegionShareSuccess(BaseModel):
+    friend_user_id: int
+    saved_region_id: int
+
+
+class SavedRegionShareFailure(BaseModel):
+    friend_user_id: int
+    reason: str
+
+
+class SavedRegionShareResponse(BaseModel):
+    shared: list[SavedRegionShareSuccess]
+    failed: list[SavedRegionShareFailure]

@@ -3,12 +3,19 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user_id
 from app.db.session import get_db
-from app.schemas.saved_regions import SavedRegionCreateRequest, SavedRegionResponse
+from app.schemas.saved_regions import (
+    SavedRegionCreateRequest,
+    SavedRegionResponse,
+    SavedRegionShareRequest,
+    SavedRegionShareResponse,
+)
+
 from app.services.saved_region_service import (
     create_saved_region,
     delete_saved_region,
     get_my_saved_region_by_id,
     get_my_saved_regions,
+    share_saved_region_with_friends,
 )
 
 router = APIRouter(
@@ -68,3 +75,28 @@ def remove_saved_region(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="저장된 여행지를 찾을 수 없습니다.",
         )
+
+@router.post("/{saved_region_id}/share", response_model=SavedRegionShareResponse)
+def share_saved_region(
+    saved_region_id: int,
+    request: SavedRegionShareRequest,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    result = share_saved_region_with_friends(
+        db=db,
+        user_id=current_user_id,
+        saved_region_id=saved_region_id,
+        friend_user_ids=request.friend_user_ids,
+    )
+
+    if result["error"] == "SAVED_REGION_NOT_FOUND":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Saved region not found.",
+        )
+
+    return {
+        "shared": result["shared"],
+        "failed": result["failed"],
+    }
