@@ -36,6 +36,7 @@ class AnchorSpotCandidate(BaseModel):
     score: float
     nearby_count: int
     nearby_spots: list[NearbySpot] = []
+    one_line_review: Optional[str] = None
 
 
 class RecommendationResult(BaseModel):

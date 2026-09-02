@@ -16,7 +16,7 @@ from app.recommendation.schemas import (
     AnchorSpotCandidate,
     RecommendationResult,
 )
-
+from app.recommendation.review_generator import generate_one_line_review
 
 MIN_NEARBY_SPOTS = 5       # 최소 인프라 커트라인
 NEARBY_RADIUS_WALK = 2000  # 뚜벅이: 2km
@@ -244,8 +244,10 @@ def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget
                 indoor_choice=indoor_choice,
             )
             c["score"] = result["final_score"]
+            c["score_detail"] = result["detail"]
         except Exception:
             c["score"] = 0.0 # 스코어링 자체가 실패하면 최하점 처리(후보에서 자연스럽게 밀려남)
+            c["score_detail"] = {}
 
         return c
 
@@ -349,6 +351,23 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
             return RecommendationResult(candidates=[])
 
         selected = random.choice(result_candidates)
+
+        selected_raw = next(
+            (c for c in top_candidates if extract_region_name(c["address"]) == selected.name),
+            None
+        )
+        score_detail = selected_raw.get("score_detail", {}) if selected_raw else {}
+        
+        try:
+            review = generate_one_line_review(
+                region_name=selected.name,
+                theme_weights=theme_weights,
+                score_detail=score_detail,
+            )
+            selected.one_line_review = review
+        except Exception:
+            selected.one_line_review = "당신을 위한 특별한 여행지"
+
         return RecommendationResult(candidates=[selected])
     except Exception as e:
         # 예상 못 한 에러가 나도 서버 전체가 죽지 않고, 빈 결과로 안전하게 반환
