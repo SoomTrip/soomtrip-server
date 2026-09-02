@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date as Date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -13,7 +13,7 @@ class DiaryEntryCreateRequest(BaseModel):
     message: str | None = None
     image_url: str | None = None
     weather: Weather | None = None
-    date: date
+    date: Date
     is_public: bool = True
 
 
@@ -22,7 +22,7 @@ class DiaryEntryUpdateRequest(BaseModel):
     message: str | None = None
     image_url: str | None = None
     weather: Weather | None = None
-    date: date | None = None
+    date: Date | None = None
     is_public: bool | None = None
 
 
@@ -34,7 +34,7 @@ class DiaryEntryResponse(BaseModel):
     message: str | None = None
     image_url: str | None = None
     weather: str | None = None
-    date: date
+    date: Date
     is_public: bool
     created_at: datetime
 
