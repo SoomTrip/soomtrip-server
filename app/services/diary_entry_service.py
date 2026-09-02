@@ -24,11 +24,11 @@ def create_diary_entry(
     diary_entry = DiaryEntry(
         saved_region_id=request.saved_region_id,
         user_id=user_id,
+        title=request.title,
         message=request.message,
         image_url=request.image_url,
-        entry_type=request.entry_type,
-        visit_start_date=request.visit_start_date,
-        visit_end_date=request.visit_end_date,
+        weather=request.weather,
+        date=request.date,
         is_public=request.is_public,
     )
 
@@ -105,16 +105,16 @@ def update_my_diary_entry(
     if diary_entry is None:
         return None
 
+    if request.title is not None:
+        diary_entry.title = request.title
     if request.message is not None:
         diary_entry.message = request.message
     if request.image_url is not None:
         diary_entry.image_url = request.image_url
-    if request.entry_type is not None:
-        diary_entry.entry_type = request.entry_type
-    if request.visit_start_date is not None:
-        diary_entry.visit_start_date = request.visit_start_date
-    if request.visit_end_date is not None:
-        diary_entry.visit_end_date = request.visit_end_date
+    if request.weather is not None:
+        diary_entry.weather = request.weather
+    if request.date is not None:
+        diary_entry.date = request.date
     if request.is_public is not None:
         diary_entry.is_public = request.is_public
 
