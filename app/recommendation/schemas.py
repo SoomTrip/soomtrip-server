@@ -42,3 +42,14 @@ class AnchorSpotCandidate(BaseModel):
 class RecommendationResult(BaseModel):
     """엔진이 반환하는 최종 결과"""
     candidates: list[AnchorSpotCandidate]
+
+
+class RouteRequest(BaseModel):
+    """동선 최적화 요청 - 프론트에서 선택한 관광지 리스트 + 여행 일수"""
+    selected_spots: list[NearbySpot]
+    num_days: int = 1   # 기본값 1(당일치기)
+
+
+class RouteResponse(BaseModel):
+    """동선 최적화 결과 - 날짜별로 정렬된 방문 순서"""
+    route_by_day: dict[str, list[NearbySpot]]
