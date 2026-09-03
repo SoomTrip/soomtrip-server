@@ -1,5 +1,7 @@
 import random
+import re
 import concurrent.futures
+from collections import defaultdict
 from app.external.tour_api.client import get_area_based_list, get_location_based_list
 from app.external.tour_api.schemas import normalize_tour_item
 from app.external.demand_api.client import get_stay_intensity
@@ -24,6 +26,23 @@ NEARBY_RADIUS_CAR = 5000   # 자차: 5km
 NEARBY_FETCH_LIMIT = 100   # 주변 스팟 조회 시 최대 개수
 TOP_N = 10                 # 최종 앵커스팟 후보 개수
 MERGE_DISTANCE_KM = 5.0    # 같은 시군구일 때 병합 판단 거리(km)
+
+# 뚜벅이(좁은 반경)일 때 카테고리별 한도
+DEFAULT_CATEGORY_LIMIT_WALK = 4
+PREFERRED_CATEGORY_LIMIT_WALK = 6
+
+# 자차(넓은 반경)일 때 카테고리별 한도
+DEFAULT_CATEGORY_LIMIT_CAR = 6
+PREFERRED_CATEGORY_LIMIT_CAR = 12
+
+# 사용자의 1순위 테마에 대응하는, 더 많이 노출해줄 카테고리 라벨
+THEME_TO_PREFERRED_CATEGORY = {
+    "ocean": "자연",
+    "nature": "자연",
+    "activity": "레포츠",
+    "urban": "문화시설",
+    "healing": "자연",
+}
 
 
 def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -> list[dict]:
@@ -119,26 +138,35 @@ def extract_region_name(address: str) -> str:
     """
     광역시/특별시는 이름만(부산, 서울) 남기고, 일반 도는 생략.
     제주는 제주시는 그대로, 서귀포시는 "제주 서귀포시"로 구분.
+    세종특별자치시는 "세종"으로 축약.
     - 구가 있는 경우(창원시 진해구, 부산 남구): 구까지만
     - 구가 없는 경우(양양군, 순천시): 너무 넓으므로 읍/면/동까지 포함
+    - 동/읍/면도 없는 경우(도로명 주소): 도로명까지 포함하되,
+      "~번길" 같은 세부 골목 단위는 "~로"까지만 잘라서 사용
     """
     parts = address.split()
 
     KEEP_SIDO_PREFIXES = ("특별시", "광역시")
     JEJU_NAME = "제주특별자치도"
+    SEJONG_NAME = "세종특별자치시"   # ⭐ 추가
     SKIP_SIDO_SUFFIXES = ("도",)
 
     sido = None
     is_jeju = False
+    is_sejong = False   # ⭐ 추가
     si = None
     gu = None
     gun = None
     eupmyeondong = None
-    road = None  # ⭐ 추가: 도로명 백업용
+    road = None
 
     for part in parts:
         if sido is None and part == JEJU_NAME:
             is_jeju = True
+            continue
+        if sido is None and part == SEJONG_NAME:   # ⭐ 추가
+            sido = "세종"
+            is_sejong = True
             continue
         if sido is None and any(part.endswith(suffix) for suffix in KEEP_SIDO_PREFIXES):
             for suffix in KEEP_SIDO_PREFIXES:
@@ -147,6 +175,15 @@ def extract_region_name(address: str) -> str:
                     break
             continue
         if any(part.endswith(suffix) for suffix in SKIP_SIDO_SUFFIXES):
+            continue
+
+        if is_sejong:   # ⭐ 세종은 하위 시/군/구 없이 바로 읍/면/동으로 감
+            if part.endswith("읍") or part.endswith("면") or part.endswith("동"):
+                eupmyeondong = part
+                break
+            if road is None and (part.endswith("로") or part.endswith("길")):
+                road_match = re.match(r'^(.+로)\d+번길$', part)
+                road = road_match.group(1) if road_match else part
             continue
 
         if si is None and gu is None and gun is None and part.endswith("시"):
@@ -170,27 +207,32 @@ def extract_region_name(address: str) -> str:
             eupmyeondong = part
             break
 
-        # 동/읍/면을 아직 못 찾았고, "로" 또는 "길"로 끝나는 도로명이면 백업으로 저장
         if road is None and (si is not None or gun is not None) and (
             part.endswith("로") or part.endswith("길")
         ):
-            road = part
+            road_match = re.match(r'^(.+로)\d+번길$', part)
+            road = road_match.group(1) if road_match else part
+
+    if is_sejong:   # ⭐ 세종 전용 결과 조립
+        detail = eupmyeondong or road
+        result_parts = [sido, detail] if detail else [sido]
+        return " ".join(p for p in result_parts if p)
 
     if gu is not None:
         sigungu_parts = [p for p in [si, gu] if p]
         sigungu = " ".join(sigungu_parts) if sigungu_parts else None
         result_parts = [p for p in [sido, sigungu] if p]
     elif gun is not None:
-        detail = eupmyeondong or road  # 동/읍/면 없으면 도로명이라도 사용
+        detail = eupmyeondong or road
         result_parts = [gun, detail] if detail else [gun]
     else:
-        detail = eupmyeondong or road  # 동/읍/면 없으면 도로명이라도 사용
+        detail = eupmyeondong or road
         result_parts = [si, detail] if detail else [si]
 
     if result_parts:
         return " ".join(p for p in result_parts if p)
     return parts[1] if len(parts) > 1 else address
-
+    
 
 def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
     """
@@ -221,6 +263,38 @@ def merge_nearby_duplicates(candidates: list[dict]) -> list[dict]:
             merged.append(spot)
 
     return merged
+
+
+def balance_categories(spots: list[dict], theme_weights: dict, mobility_choice: str = None) -> list[dict]:
+    """
+    카테고리별로 최대 개수를 제한해서 특정 카테고리(주로 식당)가
+    리스트를 독점하지 않도록 한다. 단, 사용자의 1순위 테마에 해당하는
+    카테고리는 더 넉넉한 한도를 적용해 취향에 맞는 곳이 더 많이 노출되게 한다.
+    이동수단에 따라 한도 자체도 다르게 적용한다
+    (뚜벅이는 좁은 반경이라 적게, 자차는 넓은 반경이라 넉넉하게).
+    """
+    if mobility_choice == "walk_transit":
+        default_limit = DEFAULT_CATEGORY_LIMIT_WALK
+        preferred_limit = PREFERRED_CATEGORY_LIMIT_WALK
+    else:
+        default_limit = DEFAULT_CATEGORY_LIMIT_CAR
+        preferred_limit = PREFERRED_CATEGORY_LIMIT_CAR
+
+    top_theme = max(theme_weights, key=theme_weights.get) if theme_weights else None
+    preferred_category = THEME_TO_PREFERRED_CATEGORY.get(top_theme)
+
+    category_counts = defaultdict(int)
+    balanced = []
+
+    for spot in spots:
+        label = spot.get("category_label", "기타")
+        limit = preferred_limit if label == preferred_category else default_limit
+
+        if category_counts[label] < limit:
+            balanced.append(spot)
+            category_counts[label] += 1
+
+    return balanced
 
 
 def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget_level: int, indoor_choice: bool = None) -> list[dict]:
@@ -315,6 +389,18 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
                 category_label=get_category_label(c.get("cat1"), c.get("cat3")),
             )
 
+            nearby_spots_raw = [
+                n for n in c.get("nearby_spots", [])
+                if n["latitude"] is not None and n["longitude"] is not None
+            ]
+
+            # ⭐ 카테고리 라벨을 먼저 채워서 밸런싱 함수가 쓸 수 있게 함
+            for n in nearby_spots_raw:
+                n["category_label"] = get_category_label(n.get("cat1"), n.get("cat3"))
+
+            # ⭐ 카테고리별 개수 제한 + 취향에 맞는 카테고리 우대 적용
+            nearby_spots_raw = balance_categories(nearby_spots_raw, theme_weights, preference.mobility_choice)
+            
             nearby_spots = [
                 NearbySpot(
                     content_id=n["id"],
@@ -324,10 +410,9 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
                     longitude=n["longitude"],
                     image_url=n.get("image_url"),
                     cat1=n.get("cat1"),
-                    category_label=get_category_label(n.get("cat1"), n.get("cat3")),
+                    category_label=n["category_label"],
                 )
-                for n in c.get("nearby_spots", [])
-                if n["latitude"] is not None and n["longitude"] is not None
+                for n in nearby_spots_raw
             ]
 
             all_spots = [anchor_spot] + nearby_spots
