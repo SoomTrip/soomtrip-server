@@ -11,6 +11,8 @@ from app.api.recommendations import router as recommendations_router
 from app.api.diary_entries import router as diary_entries_router
 
 from app.api.preferences import router as preferences_router
+from app.api.uploads import router as uploads_router
+
 app = FastAPI()
 
 
@@ -28,3 +30,4 @@ app.include_router(saved_regions_router)
 app.include_router(friends_router)
 app.include_router(recommendations_router)
 app.include_router(diary_entries_router)
+app.include_router(uploads_router)
