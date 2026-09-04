@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     map_api_key: str=""
     ai_api_key: str = ""
 
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_storage_bucket: str = "diary-images"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8"
