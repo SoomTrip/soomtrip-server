@@ -48,6 +48,7 @@ class RouteRequest(BaseModel):
     """동선 최적화 요청 - 프론트에서 선택한 관광지 리스트 + 여행 일수"""
     selected_spots: list[NearbySpot]
     num_days: int = 1   # 기본값 1(당일치기)
+    mobility_choice: str = "car"
 
 
 class RouteResponse(BaseModel):

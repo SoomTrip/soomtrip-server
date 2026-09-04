@@ -1,5 +1,7 @@
 from app.recommendation.geo import calculate_distance_km
 from app.recommendation.schemas import NearbySpot, RouteRequest, RouteResponse
+from app.external.map_api.naver_client import get_driving_route_info
+from app.external.map_api.tmap_client import get_walking_route_info
 
 
 FOOD_CATEGORIES = ["식당", "카페"]
@@ -148,3 +150,14 @@ def get_route_response(request: RouteRequest) -> RouteResponse:
     }
 
     return RouteResponse(route_by_day=route_by_day)
+
+
+def get_real_route_info(route: list[dict], mobility_choice: str = "car") -> dict:
+    """
+    이동수단에 따라 적절한 API로 실제 경로 정보(거리, 시간)를 구한다.
+    - 자차: 네이버 Directions API
+    - 뚜벅이: 티맵 보행자 경로 API
+    """
+    if mobility_choice == "walk_transit":
+        return get_walking_route_info(route)
+    return get_driving_route_info(route)
