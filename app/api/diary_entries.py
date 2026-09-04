@@ -16,6 +16,21 @@ from app.services.diary_entry_service import (
     get_my_diary_entry_by_id,
     update_my_diary_entry,
 )
+from app.services.upload_service import create_diary_image_signed_url
+def to_diary_entry_response(diary_entry) -> DiaryEntryResponse:
+    return DiaryEntryResponse(
+        id=diary_entry.id,
+        saved_region_id=diary_entry.saved_region_id,
+        user_id=diary_entry.user_id,
+        title=diary_entry.title,
+        message=diary_entry.message,
+        image_url=diary_entry.image_url,
+        signed_image_url=create_diary_image_signed_url(diary_entry.image_url),
+        weather=diary_entry.weather,
+        date=diary_entry.date,
+        is_public=diary_entry.is_public,
+        created_at=diary_entry.created_at,
+    )
 
 router = APIRouter(
     prefix="/diary-entries",
@@ -41,7 +56,7 @@ def create_entry(
             detail="Saved region not found.",
         )
 
-    return diary_entry
+    return to_diary_entry_response(diary_entry)
 
 
 @router.get("/me", response_model=list[DiaryEntryResponse])
@@ -49,7 +64,8 @@ def get_my_entries(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    return get_my_diary_entries(db, current_user_id)
+    diary_entries = get_my_diary_entries(db, current_user_id)
+    return [to_diary_entry_response(entry) for entry in diary_entries]
 
 
 @router.get("/saved-region/{saved_region_id}", response_model=list[DiaryEntryResponse])
@@ -70,7 +86,7 @@ def get_entries_by_saved_region(
             detail="Saved region not found.",
         )
 
-    return diary_entries
+    return [to_diary_entry_response(entry) for entry in diary_entries]
 
 
 @router.get("/{diary_entry_id}", response_model=DiaryEntryResponse)
@@ -91,8 +107,7 @@ def get_entry(
             detail="Diary entry not found.",
         )
 
-    return diary_entry
-
+    return to_diary_entry_response(diary_entry)
 
 @router.patch("/{diary_entry_id}", response_model=DiaryEntryResponse)
 def update_entry(
@@ -114,8 +129,7 @@ def update_entry(
             detail="Diary entry not found.",
         )
 
-    return diary_entry
-
+    return to_diary_entry_response(diary_entry)
 
 @router.delete("/{diary_entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_entry(
@@ -134,3 +148,4 @@ def delete_entry(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Diary entry not found.",
         )
+

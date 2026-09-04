@@ -32,7 +32,10 @@ class DiaryEntryResponse(BaseModel):
     user_id: int
     title: str | None = None
     message: str | None = None
+
     image_url: str | None = None
+    signed_image_url: str | None = None
+
     weather: str | None = None
     date: Date
     is_public: bool
