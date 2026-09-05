@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Text, Enum, Float, Date
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, Text, Enum, Float, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.session import Base
@@ -84,7 +84,6 @@ class SavedRegion(Base):
     region_name = Column(String, nullable=False)   # 예: "양양 현북면"
     score = Column(Integer, nullable=True)          # 추천 당시 점수 (참고용, 선택사항)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    stamp_color = Column(String, nullable=True)     # 도장 색상 지정
 
     user = relationship("User")
     spots = relationship("SavedRegionSpot", back_populates="saved_region", cascade="all, delete-orphan")
@@ -128,3 +127,20 @@ class DiaryEntry(Base):
 
     user = relationship("User")
     saved_region = relationship("SavedRegion")
+
+class Stamp(Base):
+    """일기를 작성한 여행지에 부여되는 도장"""
+    __tablename__ = "stamps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)
+    stamp_asset_key = Column(String, nullable=False)   # 예: "stamp1", "stamp2"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+    saved_region = relationship("SavedRegion")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "saved_region_id", name="uq_user_saved_region_stamp"),
+    )
