@@ -84,6 +84,7 @@ class SavedRegion(Base):
     region_name = Column(String, nullable=False)   # 예: "양양 현북면"
     score = Column(Integer, nullable=True)          # 추천 당시 점수 (참고용, 선택사항)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    stamp_color = Column(String, nullable=True)     # 도장 색상 지정
 
     user = relationship("User")
     spots = relationship("SavedRegionSpot", back_populates="saved_region", cascade="all, delete-orphan")
