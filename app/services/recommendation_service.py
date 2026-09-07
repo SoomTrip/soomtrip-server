@@ -29,12 +29,6 @@ def convert_preference_result_to_input(
     if preference_result.indoor_choice is False:
         theme_weights["nature"] += float(preference_result.outdoor_score or 0) * INDOOR_WEIGHT_RATIO
 
-    transport = None
-    if preference_result.mobility_choice == "car":
-        transport = "CAR"
-    elif preference_result.mobility_choice == "walk_transit":
-        transport = "PUBLIC_TRANSIT"
-
     activity_intensity = 3
     if preference_result.activity_choice == "dynamic":
         dynamic_score = preference_result.dynamic_score or 0
@@ -50,10 +44,11 @@ def convert_preference_result_to_input(
 
     return PreferenceInput(
         theme_weights=theme_weights,
-        budget_level=2,
-        transport=transport,
+        mobility_choice=preference_result.mobility_choice,
+        companion_choice=preference_result.companion_choice,
         activity_intensity=activity_intensity,
-        travel_companion=preference_result.companion_choice,
+        indoor_choice=preference_result.indoor_choice,
+        budget_level=2,
         area_code=area_code,
     )
 
