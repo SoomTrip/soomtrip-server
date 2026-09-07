@@ -144,3 +144,24 @@ class Stamp(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "saved_region_id", name="uq_user_saved_region_stamp"),
     )
+
+class RouteEntry(Base):
+    """사용자가 확정한 동선(경로)의 한 스텝. 
+    다시 저장하면 기존 것은 삭제되고 새로운 것으로 대체됨(API 로직에서 처리)."""
+    __tablename__ = "route_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)
+    saved_region_spot_id = Column(Integer, ForeignKey("saved_region_spots.id"), nullable=False)
+
+    visit_day = Column(Integer, nullable=False)             # 몇 일차인지
+    visit_order = Column(Integer, nullable=False)             # 그 날 안에서 몇 번째 방문인지
+
+    distance_from_prev_km = Column(Float, nullable=True)             # 이전 지점부터 여기까지 거리
+    duration_from_prev_minutes = Column(Integer, nullable=True)      # 이전 지점부터 여기까지 시간
+    mobility_choice = Column(String, nullable=True)                   # 이 동선을 짤 때 이동수단
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    saved_region = relationship("SavedRegion")
+    saved_region_spot = relationship("SavedRegionSpot")
