@@ -1,3 +1,6 @@
+from sqlalchemy.orm import Session
+
+from app.db.models import RouteEntry, SavedRegion, SavedRegionSpot
 from app.recommendation.route_optimizer import (
     ensure_food_per_day,
     get_real_route_info,
@@ -5,8 +8,11 @@ from app.recommendation.route_optimizer import (
     optimize_route,
     split_route_by_days,
 )
-from app.schemas.routes import RouteOptimizeRequest, RouteOptimizeResponse
-
+from app.schemas.routes import (
+    RouteOptimizeRequest,
+    RouteOptimizeResponse,
+    RouteSaveRequest,
+)
 
 def create_optimized_route(
     request: RouteOptimizeRequest,
@@ -35,3 +41,116 @@ def create_optimized_route(
         }
 
     return RouteOptimizeResponse(route_by_day=result)
+
+def save_route_entries(
+    db: Session,
+    user_id: int,
+    request: RouteSaveRequest,
+) -> list[RouteEntry] | None:
+    saved_region = (
+        db.query(SavedRegion)
+        .filter(
+            SavedRegion.id == request.saved_region_id,
+            SavedRegion.user_id == user_id,
+        )
+        .first()
+    )
+
+    if saved_region is None:
+        return None
+
+    requested_spot_ids = {
+        entry.saved_region_spot_id
+        for entry in request.entries
+    }
+
+    valid_spot_count = (
+        db.query(SavedRegionSpot)
+        .filter(
+            SavedRegionSpot.saved_region_id == request.saved_region_id,
+            SavedRegionSpot.id.in_(requested_spot_ids),
+        )
+        .count()
+    )
+
+    if valid_spot_count != len(requested_spot_ids):
+        raise ValueError("INVALID_SAVED_REGION_SPOT")
+
+    db.query(RouteEntry).filter(
+        RouteEntry.saved_region_id == request.saved_region_id,
+    ).delete()
+
+    saved_entries = []
+
+    for entry in request.entries:
+        route_entry = RouteEntry(
+            saved_region_id=request.saved_region_id,
+            saved_region_spot_id=entry.saved_region_spot_id,
+            visit_day=entry.visit_day,
+            visit_order=entry.visit_order,
+            distance_from_prev_km=entry.distance_from_prev_km,
+            duration_from_prev_minutes=entry.duration_from_prev_minutes,
+            mobility_choice=request.mobility_choice,
+        )
+
+        db.add(route_entry)
+        saved_entries.append(route_entry)
+
+    db.commit()
+
+    for entry in saved_entries:
+        db.refresh(entry)
+
+    return saved_entries
+
+def get_saved_route_by_region(
+    db: Session,
+    user_id: int,
+    saved_region_id: int,
+) -> dict | None:
+    saved_region = (
+        db.query(SavedRegion)
+        .filter(
+            SavedRegion.id == saved_region_id,
+            SavedRegion.user_id == user_id,
+        )
+        .first()
+    )
+
+    if saved_region is None:
+        return None
+
+    route_entries = (
+        db.query(RouteEntry)
+        .join(SavedRegionSpot, RouteEntry.saved_region_spot_id == SavedRegionSpot.id)
+        .filter(RouteEntry.saved_region_id == saved_region_id)
+        .order_by(RouteEntry.visit_day.asc(), RouteEntry.visit_order.asc())
+        .all()
+    )
+
+    route_by_day = {}
+
+    for entry in route_entries:
+        spot = entry.saved_region_spot
+        day_key = f"day{entry.visit_day}"
+
+        route_by_day.setdefault(day_key, []).append({
+            "route_entry_id": entry.id,
+            "saved_region_spot_id": entry.saved_region_spot_id,
+            "visit_day": entry.visit_day,
+            "visit_order": entry.visit_order,
+            "content_id": spot.content_id,
+            "name": spot.name,
+            "category_label": spot.category_label,
+            "latitude": spot.latitude,
+            "longitude": spot.longitude,
+            "is_anchor": spot.is_anchor,
+            "distance_from_prev_km": entry.distance_from_prev_km,
+            "duration_from_prev_minutes": entry.duration_from_prev_minutes,
+            "mobility_choice": entry.mobility_choice,
+        })
+
+    return {
+        "saved_region_id": saved_region_id,
+        "route_by_day": route_by_day,
+    }
