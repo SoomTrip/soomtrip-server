@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import DiaryEntry, SavedRegion
 from app.schemas.diary_entries import DiaryEntryCreateRequest, DiaryEntryUpdateRequest
-
+from app.services.stamp_service import create_stamp_if_not_exists
 
 def create_diary_entry(
     db: Session,
@@ -33,6 +33,13 @@ def create_diary_entry(
     )
 
     db.add(diary_entry)
+
+    create_stamp_if_not_exists(
+        db=db,
+        user_id=user_id,
+        saved_region_id=request.saved_region_id,
+    )
+
     db.commit()
     db.refresh(diary_entry)
 
