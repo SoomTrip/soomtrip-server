@@ -70,56 +70,122 @@ def split_route_by_days(full_route: list[dict], num_days: int) -> dict[str, list
 
 def ensure_food_per_day(route_by_day: dict[str, list[dict]]) -> dict[str, list[dict]]:
     """
-    각 날짜에 식당/카페가 최소 1개는 포함되도록 보정.
-    다른 날짜에 식당이 2개 이상 있으면 하나를 옮겨온다.
-    옮길 여분이 없으면 그대로 둔다(사용자가 애초에 식당을 충분히 선택 안 한 경우).
+    날짜별 거리 기반 분할(split_route_by_days)의 결과를 유지하되,
+    식당/카페를 포함한 모든 카테고리가 날짜 간 극단적으로 몰리지 않도록
+    "가장 가까운 다른 날짜"와 교환하며 완화한다.
+    완전한 균등 분배가 아니라, 거리를 해치지 않는 선에서의 보정.
     """
-    days_without_food = [
-        day for day, spots in route_by_day.items()
-        if not any(s.get("category_label") in FOOD_CATEGORIES for s in spots)
-    ]
+    days = list(route_by_day.keys())
+    num_days = len(days)
 
-    for day_needing_food in days_without_food:
-        for other_day, spots in route_by_day.items():
-            if other_day == day_needing_food:
-                continue
-            food_spots = [s for s in spots if s.get("category_label") in FOOD_CATEGORIES]
-            if len(food_spots) >= 2:
-                spot_to_move = food_spots[0]
-                route_by_day[other_day].remove(spot_to_move)
-                route_by_day[day_needing_food].append(spot_to_move)
-                break
+    if num_days <= 1:
+        return route_by_day
+
+    # 카테고리별로 날짜마다 몇 개씩 있는지 집계
+    from collections import defaultdict
+    category_counts_by_day = {
+        day: defaultdict(int) for day in days
+    }
+    for day in days:
+        for spot in route_by_day[day]:
+            category_counts_by_day[day][spot.get("category_label", "기타")] += 1
+
+    all_categories = set()
+    for day in days:
+        all_categories.update(category_counts_by_day[day].keys())
+
+    # 각 카테고리마다, 개수가 0인 날짜가 있고 다른 날짜엔 2개 이상 있으면 하나 옮김
+    for category in all_categories:
+        zero_days = [d for d in days if category_counts_by_day[d][category] == 0]
+        for target_day in zero_days:
+            # 가장 많이 가진 날짜에서 하나를 옮겨옴 (거리상 가장 가까운 스팟을 옮기는 게 이상적이나,
+            # 단순화를 위해 해당 카테고리 중 하나를 이동)
+            donor_day = max(days, key=lambda d: category_counts_by_day[d][category])
+            if category_counts_by_day[donor_day][category] <= 1:
+                continue  # 하나뿐이면 그 날짜의 유일한 카테고리이니 옮기지 않음
+
+            # donor_day에서 해당 카테고리 스팟 하나 찾기
+            spot_to_move = next(
+                (s for s in route_by_day[donor_day] if s.get("category_label") == category),
+                None
+            )
+            if spot_to_move:
+                route_by_day[donor_day].remove(spot_to_move)
+                route_by_day[target_day].append(spot_to_move)
+                category_counts_by_day[donor_day][category] -= 1
+                category_counts_by_day[target_day][category] += 1
 
     return route_by_day
 
 
 def interleave_food_evenly(route: list[dict]) -> list[dict]:
     """
-    관광지(비식당)를 먼저 순서 그대로 배치하고,
-    그 사이사이에 식당/카페를 균등한 간격으로 끼워넣는다.
-    예: 관광지 5개 + 식당 2개
-        -> 관광지1, 관광지2, 식당1, 관광지3, 관광지4, 식당2, 관광지5
+    관광지 전체 구간에 식당과 카페를 각각 독립적으로 고르게 분산 배치한다.
+    식당끼리도, 카페끼리도 연속되지 않도록 처리.
     """
-    non_food = [s for s in route if s.get("category_label") not in FOOD_CATEGORIES]
-    food = [s for s in route if s.get("category_label") in FOOD_CATEGORIES]
+    non_food = [s for s in route if s.get("category_label") not in ["식당", "카페"]]
+    restaurants = [s for s in route if s.get("category_label") == "식당"]
+    cafes = [s for s in route if s.get("category_label") == "카페"]
 
-    if not food:
+    if not restaurants and not cafes:
         return non_food
-    if not non_food:
-        return food
 
-    result = []
-    segment_count = len(food) + 1
-    base_size = len(non_food) // segment_count
-    remainder = len(non_food) % segment_count
+    total_length = len(route)
 
-    idx = 0
-    for i in range(segment_count):
-        size = base_size + (1 if i < remainder else 0)
-        result.extend(non_food[idx: idx + size])
-        idx += size
-        if i < len(food):
-            result.append(food[i])
+    def calc_positions(count: int, total: int) -> list[int]:
+        """count개의 항목을 total 길이 안에 균등한 간격으로 배치할 위치 계산."""
+        if count == 0:
+            return []
+        return [round((i + 1) * total / (count + 1)) for i in range(count)]
+
+    # 1. 식당 위치를 전체 길이에 고르게 분산
+    restaurant_positions = calc_positions(len(restaurants), total_length)
+
+    # 2. 카페 위치도 전체 길이에 고르게 분산
+    cafe_positions = calc_positions(len(cafes), total_length)
+
+    # 3. 위치가 겹치면 조정 (카페 위치를 살짝 밀어냄)
+    used_positions = set(restaurant_positions)
+    adjusted_cafe_positions = []
+    for pos in cafe_positions:
+        while pos in used_positions and pos < total_length - 1:
+            pos += 1
+        used_positions.add(pos)
+        adjusted_cafe_positions.append(pos)
+
+    # 4. 결과 배열 채우기
+    result = [None] * total_length
+    for idx, pos in enumerate(restaurant_positions):
+        pos = min(pos, total_length - 1)
+        result[pos] = restaurants[idx]
+    for idx, pos in enumerate(adjusted_cafe_positions):
+        pos = min(pos, total_length - 1)
+        if result[pos] is None:
+            result[pos] = cafes[idx]
+        else:
+            # 혹시 자리가 이미 찼으면 다음 빈 자리 찾기
+            for j in range(total_length):
+                if result[j] is None:
+                    result[j] = cafes[idx]
+                    break
+
+    non_food_idx = 0
+    for i in range(total_length):
+        if result[i] is None and non_food_idx < len(non_food):
+            result[i] = non_food[non_food_idx]
+            non_food_idx += 1
+
+    result = [s for s in result if s is not None]
+
+    # 5. 최종 안전장치: 연속된 같은 카테고리가 있으면 뒤쪽 관광지와 자리 교환
+    for i in range(len(result) - 1):
+        curr = result[i].get("category_label")
+        next_ = result[i + 1].get("category_label")
+        if curr in ["식당", "카페"] and curr == next_:
+            for j in range(i + 2, len(result)):
+                if result[j].get("category_label") not in ["식당", "카페"]:
+                    result[i + 1], result[j] = result[j], result[i + 1]
+                    break
 
     return result
 
