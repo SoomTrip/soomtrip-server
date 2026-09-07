@@ -49,6 +49,9 @@ class RouteEntryResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class RouteSaveResponse(BaseModel):
+    saved_region_id: int
+    entries: list[RouteEntryResponse]
 
 class SavedRouteSpotResponse(BaseModel):
     route_entry_id: int
