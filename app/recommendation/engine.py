@@ -28,11 +28,11 @@ TOP_N = 10                 # 최종 앵커스팟 후보 개수
 MERGE_DISTANCE_KM = 5.0    # 같은 시군구일 때 병합 판단 거리(km)
 
 # 뚜벅이(좁은 반경)일 때 카테고리별 한도
-DEFAULT_CATEGORY_LIMIT_WALK = 4
-PREFERRED_CATEGORY_LIMIT_WALK = 6
+DEFAULT_CATEGORY_LIMIT_WALK = 6
+PREFERRED_CATEGORY_LIMIT_WALK = 8
 
 # 자차(넓은 반경)일 때 카테고리별 한도
-DEFAULT_CATEGORY_LIMIT_CAR = 6
+DEFAULT_CATEGORY_LIMIT_CAR = 8
 PREFERRED_CATEGORY_LIMIT_CAR = 12
 
 # 사용자의 1순위 테마에 대응하는, 더 많이 노출해줄 카테고리 라벨

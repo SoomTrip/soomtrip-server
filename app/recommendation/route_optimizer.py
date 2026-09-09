@@ -2,6 +2,8 @@ from app.recommendation.geo import calculate_distance_km
 from app.recommendation.schemas import NearbySpot, RouteRequest, RouteResponse
 from app.external.map_api.naver_client import get_driving_route_info
 from app.external.map_api.tmap_client import get_walking_route_info
+from app.db.models import PreferenceResult, SavedRegion
+from app.db.session import SessionLocal
 
 
 FOOD_CATEGORIES = ["식당", "카페"]
@@ -218,12 +220,63 @@ def get_route_response(request: RouteRequest) -> RouteResponse:
     return RouteResponse(route_by_day=route_by_day)
 
 
-def get_real_route_info(route: list[dict], mobility_choice: str = "car") -> dict:
+def get_latest_mobility_choice(user_id: int) -> str | None:
+    """
+    이 유저가 지금까지 한 월드컵(취향조사) 중 가장 최근 결과의 이동수단 선호값.
+    없으면 None. SavedRegion을 새로 만들 때 그 시점의 선호값을 스냅샷으로 남기는 데 쓴다.
+    """
+    db = SessionLocal()
+    try:
+        latest = (
+            db.query(PreferenceResult)
+            .filter(
+                PreferenceResult.user_id == user_id,
+                PreferenceResult.mobility_choice.isnot(None),
+            )
+            .order_by(PreferenceResult.created_at.desc())
+            .first()
+        )
+    finally:
+        db.close()
+
+    return latest.mobility_choice if latest is not None else None
+
+
+def resolve_mobility_choice(mobility_choice: str, saved_region_id: int | None) -> str:
+    """
+    앱이 요청에 실어 보낸 mobility_choice를 그대로 믿지 않고,
+    saved_region_id가 있으면 그 여행지를 찜할 당시 SavedRegion에 저장해둔
+    이동수단 선호값을 우선 사용한다. (앱이 값을 잘못 보내는 경우를 서버에서 보정)
+    """
+    if saved_region_id is None:
+        return mobility_choice
+
+    db = SessionLocal()
+    try:
+        saved_region = (
+            db.query(SavedRegion)
+            .filter(SavedRegion.id == saved_region_id)
+            .first()
+        )
+    finally:
+        db.close()
+
+    if saved_region is None or saved_region.mobility_choice is None:
+        return mobility_choice
+    return saved_region.mobility_choice
+
+
+def get_real_route_info(
+    route: list[dict],
+    mobility_choice: str = "car",
+    saved_region_id: int | None = None,
+) -> dict:
     """
     이동수단에 따라 적절한 API로 실제 경로 정보(거리, 시간)를 구한다.
     - 자차: 네이버 Directions API
     - 뚜벅이: 티맵 보행자 경로 API
     """
-    if mobility_choice == "walk_transit":
+    resolved_choice = resolve_mobility_choice(mobility_choice, saved_region_id)
+    if resolved_choice == "walk_transit":
         return get_walking_route_info(route)
     return get_driving_route_info(route)
