@@ -31,6 +31,18 @@ def get_walking_route_info(route: list[dict]) -> dict:
         start = route[i]
         end = route[i + 1]
 
+        if (round(start["longitude"], 5), round(start["latitude"], 5)) == (
+            round(end["longitude"], 5), round(end["latitude"], 5)
+        ):
+            # 좌표가 겹치는 구간(같은 건물의 다른 스팟 등)은 API 호출 없이 0으로 처리
+            segments.append({
+                "from": start.get("name", f"지점{i+1}"),
+                "to": end.get("name", f"지점{i+2}"),
+                "distance_km": 0,
+                "duration_minutes": 0,
+            })
+            continue
+
         payload = {
             "startX": str(start["longitude"]),
             "startY": str(start["latitude"]),
