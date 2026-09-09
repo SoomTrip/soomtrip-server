@@ -65,7 +65,11 @@ def get_driving_route_info(route: list[dict]) -> dict:
 
     try:
         response = requests.get(NAVER_DIRECTIONS_URL, headers=headers, params=params, timeout=10)
+        print("[Naver request params]", params)
+        print("[Naver status]", response.status_code)
+        print("[Naver body]", response.text[:1000])
         response.raise_for_status()
+        
         data = response.json()
         summary = data["route"]["trafast"][0]["summary"]
 
