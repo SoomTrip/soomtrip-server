@@ -37,8 +37,25 @@ def attach_segment_info_to_spots(
 
 
 def create_optimized_route(
+    db: Session,
+    user_id: int,
     request: RouteOptimizeRequest,
-) -> RouteOptimizeResponse:
+) -> RouteOptimizeResponse | None:
+
+    saved_region = (
+        db.query(SavedRegion)
+        .filter(
+            SavedRegion.id == request.saved_region_id,
+            SavedRegion.user_id == user_id,
+        )
+        .first()
+    )
+
+    if saved_region is None:
+        return None
+
+    mobility_choice = saved_region.mobility_choice or "car"
+
     spots_as_dict = [spot.model_dump() for spot in request.selected_spots]
 
     full_route = optimize_route(spots_as_dict)
@@ -52,12 +69,10 @@ def create_optimized_route(
 
         real_info = get_real_route_info(
             ordered_spots,
-            mobility_choice=request.mobility_choice,
-            saved_region_id=request.saved_region_id,
+            mobility_choice=mobility_choice,
         )
-        print("[Route Optimize mobility_choice]", request.mobility_choice)
-
-        print("[Route Optimize real_info]", real_info)
+        #print("[Route Optimize mobility_choice]", mobility_choice)
+        #print("[Route Optimize real_info]", real_info)
 
         result[day] = {
             "spots": attach_segment_info_to_spots(
@@ -111,6 +126,8 @@ def save_route_entries(
 
     saved_entries = []
 
+    mobility_choice = saved_region.mobility_choice or "car"
+
     for entry in request.entries:
         route_entry = RouteEntry(
             saved_region_id=request.saved_region_id,
@@ -119,7 +136,7 @@ def save_route_entries(
             visit_order=entry.visit_order,
             distance_from_prev_km=entry.distance_from_prev_km,
             duration_from_prev_minutes=entry.duration_from_prev_minutes,
-            mobility_choice=request.mobility_choice,
+            mobility_choice=mobility_choice,
         )
 
         db.add(route_entry)

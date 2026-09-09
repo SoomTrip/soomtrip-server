@@ -362,7 +362,10 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
         candidates = apply_infra_cutoff(candidates, preference.mobility_choice)
 
         if not candidates:
-            return RecommendationResult(candidates=[])
+            return RecommendationResult(
+                mobility_choice=preference.mobility_choice,
+                candidates=[],
+            )
 
         # 5. 스코어링 (혼잡도 + 실내/실외 매칭 반영)
         candidates = enrich_with_demand_score(
@@ -435,7 +438,10 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
 
         # 9. 상위 N개 중 랜덤으로 1개 최종 선택
         if not result_candidates:
-            return RecommendationResult(candidates=[])
+            return RecommendationResult(
+                mobility_choice=preference.mobility_choice,
+                candidates=[],
+            )
 
         selected = random.choice(result_candidates)
 
@@ -455,8 +461,14 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
         except Exception:
             selected.one_line_review = "당신을 위한 특별한 여행지"
 
-        return RecommendationResult(candidates=[selected])
+        return RecommendationResult(
+            mobility_choice=preference.mobility_choice,
+            candidates=[selected],
+        )
     except Exception as e:
         # 예상 못 한 에러가 나도 서버 전체가 죽지 않고, 빈 결과로 안전하게 반환
         print(f"[get_recommendations] 예상치 못한 에러 발생: {e}")
-        return RecommendationResult(candidates=[])
+        return RecommendationResult(
+            mobility_choice=preference.mobility_choice,
+            candidates=[],
+        )

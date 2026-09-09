@@ -27,6 +27,7 @@ router = APIRouter(
 def optimize_route_endpoint(
     request: RouteOptimizeRequest,
     current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
 ):
     if not request.selected_spots:
         raise HTTPException(
@@ -34,13 +35,19 @@ def optimize_route_endpoint(
             detail="Selected spots are required.",
         )
 
-    if request.mobility_choice not in ["car", "walk_transit"]:
+    route = create_optimized_route(
+        db=db,
+        user_id=current_user_id,
+        request=request,
+    )
+
+    if route is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="mobility_choice must be car or walk_transit.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Saved region not found.",
         )
 
-    return create_optimized_route(request)
+    return route
 
 @router.post("/save", response_model=RouteSaveResponse)
 def save_route(
@@ -48,11 +55,6 @@ def save_route(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    if request.mobility_choice not in ["car", "walk_transit"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="mobility_choice must be car or walk_transit.",
-        )
 
     try:
         entries = save_route_entries(

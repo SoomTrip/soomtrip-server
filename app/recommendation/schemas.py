@@ -41,6 +41,7 @@ class AnchorSpotCandidate(BaseModel):
 
 class RecommendationResult(BaseModel):
     """엔진이 반환하는 최종 결과"""
+    mobility_choice: str | None = None
     candidates: list[AnchorSpotCandidate]
 
 

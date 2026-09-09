@@ -2,7 +2,6 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import Friend, FriendStatus, SavedRegion, SavedRegionSpot
-from app.recommendation.route_optimizer import get_latest_mobility_choice
 from app.schemas.saved_regions import SavedRegionCreateRequest
 
 
@@ -15,7 +14,7 @@ def create_saved_region(
         user_id=user_id,
         region_name=request.region_name,
         score=request.score,
-        mobility_choice=get_latest_mobility_choice(user_id),
+        mobility_choice=request.mobility_choice,
     )
 
     for spot in request.spots:
@@ -153,7 +152,7 @@ def copy_saved_region_to_user(
         user_id=target_user_id,
         region_name=source_saved_region.region_name,
         score=source_saved_region.score,
-        mobility_choice=get_latest_mobility_choice(target_user_id),
+        mobility_choice=source_saved_region.mobility_choice,
     )
 
     for spot in source_saved_region.spots:

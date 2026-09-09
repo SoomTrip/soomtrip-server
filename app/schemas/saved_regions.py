@@ -2,6 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from typing import Literal
+
+MobilityChoice = Literal["walk_transit", "car"]
+
 
 class SavedRegionSpotCreateRequest(BaseModel):
     content_id: str
@@ -15,6 +19,7 @@ class SavedRegionSpotCreateRequest(BaseModel):
 class SavedRegionCreateRequest(BaseModel):
     region_name: str
     score: int | None = None
+    mobility_choice: MobilityChoice | None = None
     spots: list[SavedRegionSpotCreateRequest]
 
 
@@ -35,6 +40,7 @@ class SavedRegionResponse(BaseModel):
     user_id: int
     region_name: str
     score: int | None = None
+    mobility_choice: MobilityChoice | None = None
     created_at: datetime
     spots: list[SavedRegionSpotResponse] = []
 

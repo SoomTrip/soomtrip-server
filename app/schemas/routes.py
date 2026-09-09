@@ -6,10 +6,9 @@ from app.recommendation.schemas import NearbySpot
 
 
 class RouteOptimizeRequest(BaseModel):
+    saved_region_id: int
     selected_spots: list[NearbySpot]
     num_days: int = 1
-    mobility_choice: str = "car"
-    saved_region_id: int | None = None
 
 
 class RouteSpotResponse(NearbySpot):
@@ -38,7 +37,6 @@ class RouteEntrySaveRequest(BaseModel):
 
 class RouteSaveRequest(BaseModel):
     saved_region_id: int
-    mobility_choice: str
     entries: list[RouteEntrySaveRequest]
 
 
