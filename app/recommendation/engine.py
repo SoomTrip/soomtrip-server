@@ -90,6 +90,7 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
     """
     radius = NEARBY_RADIUS_WALK if mobility_choice == "walk_transit" else NEARBY_RADIUS_CAR
     EXCLUDED_CAT1 = ["B02"]  # 숙박 제외
+    EXCLUDED_CONTENT_TYPES = ["25"]  # 여행코스 제외 (개별 장소만)
 
     def fetch_nearby(spot):
         if spot["latitude"] is None or spot["longitude"] is None:
@@ -106,10 +107,11 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
             # 이 후보 하나만 실패 처리, 전체는 게속 진행
             return None
 
-        # ⭐ 숙박(B02) 제외 필터링
+        # 숙박(B02) + 여행코스(25) 제외 필터링
         nearby_raw = [
             n for n in nearby_raw
             if n.get("cat1") not in EXCLUDED_CAT1
+            and n.get("contenttypeid") not in EXCLUDED_CONTENT_TYPES
         ]
 
         if len(nearby_raw) >= MIN_NEARBY_SPOTS:
