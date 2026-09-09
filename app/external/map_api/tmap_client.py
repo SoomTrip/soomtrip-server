@@ -56,6 +56,9 @@ def get_walking_route_info(route: list[dict]) -> dict:
 
         try:
             response = requests.post(TMAP_PEDESTRIAN_URL, json=payload, headers=headers, timeout=10)
+            print("[Tmap payload]", payload)
+            print("[Tmap status]", response.status_code)
+            print("[Tmap body]", response.text[:1000])
             response.raise_for_status()
             data = response.json()
             properties = data["features"][0]["properties"]
