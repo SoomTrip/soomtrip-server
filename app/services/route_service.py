@@ -53,6 +53,7 @@ def create_optimized_route(
         real_info = get_real_route_info(
             ordered_spots,
             mobility_choice=request.mobility_choice,
+            saved_region_id=request.saved_region_id,
         )
         print("[Route Optimize mobility_choice]", request.mobility_choice)
 

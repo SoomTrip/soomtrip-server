@@ -9,6 +9,7 @@ class RouteOptimizeRequest(BaseModel):
     selected_spots: list[NearbySpot]
     num_days: int = 1
     mobility_choice: str = "car"
+    saved_region_id: int | None = None
 
 
 class RouteSpotResponse(NearbySpot):

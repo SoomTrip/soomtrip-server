@@ -83,6 +83,7 @@ class SavedRegion(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     region_name = Column(String, nullable=False)   # 예: "양양 현북면"
     score = Column(Integer, nullable=True)          # 추천 당시 점수 (참고용, 선택사항)
+    mobility_choice = Column(String, nullable=True)  # 찜할 당시 사용자의 이동수단 선호값 ("walk_transit" 또는 "car")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User")
