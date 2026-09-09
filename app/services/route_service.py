@@ -55,6 +55,8 @@ def create_optimized_route(
             mobility_choice=request.mobility_choice,
         )
 
+        print("[Route Optimize real_info]", real_info)
+
         result[day] = {
             "spots": attach_segment_info_to_spots(
                 ordered_spots,
