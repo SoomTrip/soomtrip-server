@@ -11,8 +11,13 @@ class RouteOptimizeRequest(BaseModel):
     mobility_choice: str = "car"
 
 
+class RouteSpotResponse(NearbySpot):
+    distance_from_prev_km: float | None = None
+    duration_from_prev_minutes: int | None = None
+
+
 class RouteDayResponse(BaseModel):
-    spots: list[NearbySpot]
+    spots: list[RouteSpotResponse]
     total_distance_km: float | None = None
     total_duration_minutes: int | None = None
     segments: list[dict]
