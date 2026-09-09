@@ -14,6 +14,28 @@ STAMP_ASSET_KEYS = [
     "stamp6",
 ]
 
+def pick_stamp_asset_key(
+    db: Session,
+    user_id: int,
+) -> str:
+    used_stamp_keys = {
+        stamp_asset_key
+        for (stamp_asset_key,) in (
+            db.query(Stamp.stamp_asset_key)
+            .filter(Stamp.user_id == user_id)
+            .all()
+        )
+    }
+
+    unused_stamp_keys = [
+        key for key in STAMP_ASSET_KEYS
+        if key not in used_stamp_keys
+    ]
+
+    if unused_stamp_keys:
+        return random.choice(unused_stamp_keys)
+
+    return random.choice(STAMP_ASSET_KEYS)
 
 def create_stamp_if_not_exists(
     db: Session,
@@ -35,7 +57,7 @@ def create_stamp_if_not_exists(
     stamp = Stamp(
         user_id=user_id,
         saved_region_id=saved_region_id,
-        stamp_asset_key=random.choice(STAMP_ASSET_KEYS),
+        stamp_asset_key=pick_stamp_asset_key(db, user_id),
     )
 
     db.add(stamp)

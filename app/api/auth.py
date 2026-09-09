@@ -4,8 +4,21 @@ from fastapi import APIRouter, Depends,  HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.auth import KakaoLoginRequest, LoginResponse
-from app.services.auth_service import get_kakao_user, get_or_create_user_by_kakao
+from app.schemas.auth import (
+    KakaoLoginRequest,
+    LoginResponse,
+    LogoutRequest,
+    LogoutResponse,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+)
+from app.services.auth_service import (
+    get_kakao_user,
+    get_or_create_user_by_kakao,
+    get_valid_refresh_token,
+    issue_refresh_token,
+    revoke_refresh_token,
+)
 from app.core.security import create_access_token
 from app.api.deps import get_current_user_id
 
@@ -39,8 +52,14 @@ async def kakao_login(
         str(user.id)
     )
 
+    soomtrip_refresh_token = issue_refresh_token(
+        db=db,
+        user_id=user.id,
+    )
+
     return {
         "access_token": soomtrip_access_token,
+        "refresh_token": soomtrip_refresh_token,
         "token_type": "bearer",
     }
 
@@ -51,4 +70,42 @@ def verify_token(
 ):
     return {
         "user_id": current_user_id,
+    }
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+def refresh_access_token(
+    request: RefreshTokenRequest,
+    db: Session = Depends(get_db),
+):
+    db_refresh_token = get_valid_refresh_token(
+        db=db,
+        refresh_token=request.refresh_token,
+    )
+
+    if db_refresh_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 refresh token입니다.",
+        )
+
+    access_token = create_access_token(str(db_refresh_token.user_id))
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/logout", response_model=LogoutResponse)
+def logout(
+    request: LogoutRequest,
+    db: Session = Depends(get_db),
+):
+    revoke_refresh_token(
+        db=db,
+        refresh_token=request.refresh_token,
+    )
+
+    return {
+        "message": "로그아웃되었습니다.",
     }
