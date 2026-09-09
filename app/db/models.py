@@ -165,3 +165,19 @@ class RouteEntry(Base):
 
     saved_region = relationship("SavedRegion")
     saved_region_spot = relationship("SavedRegionSpot")
+
+
+class RefreshToken(Base):
+    """자체 발급 Refresh Token 관리 (원문이 아닌 hash만 저장)"""
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    token_hash = Column(String, nullable=False, unique=True)
+
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")

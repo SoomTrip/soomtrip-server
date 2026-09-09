@@ -6,12 +6,11 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("AI_API_KEY"))
 
-# review_generator.py
-
 import random
 
 def generate_one_line_review(
     region_name: str,
+    
     theme_weights: dict,
     score_detail: dict,
 ) -> str:
