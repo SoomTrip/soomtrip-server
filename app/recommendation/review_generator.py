@@ -1,4 +1,5 @@
 import os
+import random
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -6,381 +7,134 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("AI_API_KEY"))
 
-import random
+
+def get_clover_emoji() -> str:
+    """
+    75% 확률로 세잎클로버(☘️), 25% 확률로 네잎클로버(🍀, 행운)를 반환.
+    """
+    THREE_LEAF = "☘️"
+    FOUR_LEAF = "🍀"
+    return random.choices([THREE_LEAF, FOUR_LEAF], weights=[70, 30])[0]
+
+
+def get_preference_description(theme_weights: dict) -> str:
+    """
+    상위 1~2개 테마를 조합해서 사용자 성향을 더 풍부하게 설명.
+    두 번째 테마가 첫 번째와 비슷한 비중이면 함께 언급.
+    """
+    theme_desc_map = {
+        "ocean": "탁 트인 풍경과 시원한 바람을 좋아하는",
+        "nature": "자연 속에서 편안함을 느끼는",
+        "activity": "가만히 있기보다 활동적으로 움직이는 걸 즐기는",
+        "urban": "정돈된 분위기와 실내 공간을 편안해하는",
+        "healing": "복잡한 일상에서 벗어나 여유롭게 쉬고 싶은",
+    }
+
+    sorted_themes = sorted(theme_weights.items(), key=lambda x: x[1], reverse=True)
+    if not sorted_themes or sorted_themes[0][1] == 0:
+        return "새로운 여행을 원하는"
+
+    top_theme, top_score = sorted_themes[0]
+    top_desc = theme_desc_map.get(top_theme, "새로운 여행을 원하는")
+
+    if len(sorted_themes) > 1:
+        second_theme, second_score = sorted_themes[1]
+        if second_score > 0 and second_score >= top_score * 0.6:
+            second_desc = theme_desc_map.get(second_theme, "")
+            if second_desc:
+                return f"{top_desc} 동시에 {second_desc}"
+
+    return top_desc
+
+
+def get_destination_characteristics(score_detail: dict) -> str:
+    """
+    score_detail(스코어링 세부 점수)을 바탕으로,
+    지명 없이 여행지의 실제 특성을 설명하는 힌트를 생성한다.
+    """
+    characteristics = []
+
+    crowd_score = score_detail.get("crowd_score", 50)
+    if crowd_score >= 65:
+        characteristics.append("사람들의 발길이 드문 한적한 곳")
+    elif crowd_score <= 35:
+        characteristics.append("적당히 활기가 느껴지는 곳")
+
+    diversity_score = score_detail.get("diversity_score", 50)
+    if diversity_score >= 65:
+        characteristics.append("주변에 둘러볼 것이 풍부한 곳")
+    elif diversity_score <= 30:
+        characteristics.append("소박하고 아늑한 곳")
+
+    indoor_match_score = score_detail.get("indoor_match_score", 50)
+    if indoor_match_score >= 80:
+        characteristics.append("찾던 분위기와 꼭 맞는 공간")
+
+    if not characteristics:
+        return ""
+
+    return ", ".join(characteristics)
+
 
 def generate_one_line_review(
     region_name: str,
-    
     theme_weights: dict,
     score_detail: dict,
 ) -> str:
     """
-    추천된 여행지에 대한 감성적인 한줄평을 AI로 생성.
-
-    - 여행지 스코어링 결과를 반영
-    - 가장 높은 테마와 두 번째 테마를 활용
-    - 크레파스로 그린 여행 그림 같은 분위기
-    - 따뜻하고 아기자기하지만 유치하지 않은 표현
-    - 지역명은 문구에 포함하지 않음
+    추천된 여행지에 대한 한줄평을 AI로 생성.
+    구체적인 장소명은 언급하지 않되, 사용자의 취향과 실제 여행지의 특성
+    (혼잡도, 다양성 등)을 함께 반영해 더 정확하고 풍부한 문구를 만든다.
+    마지막에는 클로버 이모지를 확률적으로 붙인다(코드에서 직접 제어).
     """
+    preference_desc = get_preference_description(theme_weights)
+    destination_desc = get_destination_characteristics(score_detail)
 
-    # --------------------------------------------------
-    # 1. 테마 점수가 높은 순서대로 정렬
-    # --------------------------------------------------
-
-    sorted_themes = sorted(
-        theme_weights.items(),
-        key=lambda x: x[1],
-        reverse=True
+    destination_hint_line = (
+        f"이 여행지의 실제 특징: {destination_desc}"
+        if destination_desc
+        else "이 여행지의 특징: 특별히 두드러지는 특징 없이 무난함"
     )
-
-    top_theme = (
-        sorted_themes[0][0]
-        if sorted_themes
-        else "travel"
-    )
-
-    second_theme = (
-        sorted_themes[1][0]
-        if len(sorted_themes) > 1
-        else None
-    )
-
-
-    # --------------------------------------------------
-    # 2. 테마별 표현
-    # --------------------------------------------------
-
-    theme_hint_map = {
-
-        "ocean": [
-            "파도 소리",
-            "잔잔한 물결",
-            "시원한 바닷바람",
-            "하얀 모래사장",
-            "끝없이 펼쳐진 수평선",
-            "살랑이는 파도",
-            "작은 조개",
-            "갈매기 소리",
-            "반짝이는 바다",
-            "해변의 여유",
-            "바다 내음",
-            "모래 위 발자국",
-            "찰랑이는 파도",
-            "따뜻한 해변",
-        ],
-
-        "nature": [
-            "초록 숲",
-            "살랑이는 나뭇잎",
-            "맑은 새소리",
-            "따뜻한 햇살",
-            "시원한 산바람",
-            "작은 꽃길",
-            "푸른 들판",
-            "나무 그늘",
-            "숲속 오솔길",
-            "싱그러운 풀잎",
-        ],
-
-        "activity": [
-            "두근거리는 순간",
-            "신나는 발걸음",
-            "작은 모험",
-            "짜릿한 하루",
-            "새로운 발견",
-            "즐거운 놀이",
-            "활기찬 여행",
-            "신나는 경험",
-        ],
-
-        "urban": [
-            "알록달록한 골목",
-            "반짝이는 거리",
-            "작은 가게들",
-            "따뜻한 카페",
-            "도시의 불빛",
-            "재미있는 골목길",
-            "아기자기한 풍경",
-            "오래된 간판",
-        ],
-
-        "healing": [
-            "느긋한 오후",
-            "포근한 햇살",
-            "잔잔한 바람",
-            "조용한 산책",
-            "편안한 휴식",
-            "따뜻한 하루",
-            "느린 시간",
-            "고요한 풍경",
-        ],
-    }
-
-
-    # --------------------------------------------------
-    # 3. 상위 테마에서 랜덤하게 표현 선택
-    # --------------------------------------------------
-
-    top_candidates = theme_hint_map.get(
-        top_theme,
-        ["여행의 설렘", "새로운 풍경"]
-    )
-
-    top_words = random.sample(
-        top_candidates,
-        min(4, len(top_candidates))
-    )
-
-
-    second_words = []
-
-    if second_theme in theme_hint_map:
-
-        second_candidates = theme_hint_map[second_theme]
-
-        second_words = random.sample(
-            second_candidates,
-            min(2, len(second_candidates))
-        )
-
-
-    # --------------------------------------------------
-    # 4. 문장 스타일 랜덤 선택
-    # --------------------------------------------------
-
-    styles = [
-        "감성적인 여행 소개 문구",
-        "따뜻한 그림책의 한 문장",
-        "크레파스 그림 아래 적힌 짧은 문구",
-        "여행 엽서에 적힌 한줄 문구",
-        "아기자기한 여행 카드의 소개 문구",
-        "짧은 동화 속 여행 장면",
-    ]
-
-    selected_style = random.choice(styles)
-
-
-    # --------------------------------------------------
-    # 5. AI 프롬프트
-    # --------------------------------------------------
 
     prompt = f"""
-여행지의 분위기를 소개하는 감성적인 한줄평을 작성해줘.
+당신은 숨은 여행 추천 앱 '숨트립'의 카피라이터입니다.
+사용자가 월드컵(취향 테스트)에서 선택한 결과와, 실제로 추천된 여행지의 특징을
+함께 반영해서 자연스러운 한 줄 문구를 만들어주세요.
 
-이 문구는 여행 앱의 여행지 카드에 들어가는
-짧은 소개 문구야.
+사용자 성향 힌트: {preference_desc} 사람
+{destination_hint_line}
 
-여행지 이름:
-{region_name}
+문구 스타일 예시 (참고만 하고 그대로 베끼지 마세요):
+- "분주한 일정보다 느긋한 여유에 마음이 가는 당신에게, 이곳을 추천해요!"
+- "익숙한 일상에서 살짝 벗어나 새로운 분위기를 만나고 싶다면, 이곳은 어때요?"
+- "화려함보다 편안함, 북적임보다 한적함을 고른 당신에게 잘 어울리는 여행지예요!"
+- "이것저것 채우기보다 마음 가는 대로 머물고 싶은 이번 여행에 추천해요!"
+- "조용히 쉬는 것도 좋지만 새로운 즐거움도 놓치기 싫은 당신에게, 이곳을 추천해요!"
 
-여행지 스코어:
-{score_detail}
+작성 조건:
+- 완전한 문장으로 작성할 것 (구절이 아니라 자연스러운 문장체)
+- "당신에게", "~어때요?", "~추천해요!" 같은 다정하게 말을 거는 톤을 사용할 것
+- 구체적인 지명, 장소 이름, 특정 활동(예: 카페, 등산 등)은 절대 언급하지 말 것
+- 사용자의 취향뿐 아니라, 위에 제공된 "여행지의 실제 특징"도 자연스럽게 녹여낼 것
+  (단, 특징을 그대로 나열하지 말고 문장에 은은하게 녹여낼 것)
+- 20~35자 내외
+- 위 5개 예시와는 다른, 새로운 표현으로 작성할 것
+- 물음표 또는 느낌표로 자연스럽게 끝낼 것
+- 이모지는 포함하지 말 것
 
-가장 높은 테마:
-{top_theme}
-
-가장 높은 테마의 관련 표현:
-{", ".join(top_words)}
-
-두 번째 테마:
-{second_theme if second_theme else "없음"}
-
-두 번째 테마의 관련 표현:
-{", ".join(second_words) if second_words else "없음"}
-
-이번 문장의 스타일:
-{selected_style}
-
-
-================================
-원하는 분위기
-================================
-
-예시:
-
-"파도 소리와 함께하는 완벽한 힐링"
-
-처럼 감성적이고 깔끔한 여행지 소개 문구.
-
-크레파스로 그린 여행 그림처럼
-따뜻하고 아기자기한 분위기를 느낄 수 있게 작성해줘.
-
-하지만 실제 어린아이의 말투처럼 쓰지는 마.
-
-유치한 표현보다는
-어린아이가 그린 그림을 바라보는 듯한
-순수하고 따뜻한 분위기를 만들어줘.
-
-문구를 읽었을 때
-여행지의 모습이 머릿속에 간단한 그림처럼 떠올라야 해.
-
-
-================================
-스코어 반영
-================================
-
-가장 높은 테마를 문구의 중심으로 사용해.
-
-두 번째 테마는 자연스럽게 어울릴 경우에만 사용해.
-
-테마의 단어를 억지로 모두 넣지 말고,
-가장 잘 어울리는 소재 1~2개만 사용해.
-
-점수가 낮은 테마를 문구의 중심으로 만들지 마.
-
-
-================================
-표현 다양성
-================================
-
-같은 단어와 표현을 반복하지 마.
-
-특히 다음 단어는 필요할 때만 사용하고
-한 문구에서는 최대 한 번만 사용해:
-
-푸른
-설렘
-작은
-함께
-하루
-여행
-바다
-
-"푸른"이라는 단어를 매번 사용하지 마.
-
-바다 테마라고 해서 항상
-"푸른 바다", "푸른 물결"을 사용하지 마.
-
-대신 다음과 같이 다양한 소재를 사용해:
-
-파도 소리
-바닷바람
-모래사장
-조개
-갈매기
-수평선
-물결
-해변
-바다 내음
-모래 위 발자국
-
-
-================================
-문장 구조
-================================
-
-한 가지 문장 구조를 반복하지 마.
-
-다음 구조를 참고하되
-매번 다른 구조를 선택해:
-
-~와 함께하는 ~
-~에서 만나는 ~
-~이 선물하는 ~
-~속에서 즐기는 ~
-~을 따라 걷는 ~
-~으로 물드는 ~
-~이 머무는 ~
-~이 가득한 ~
-~을 닮은 ~
-
-
-================================
-금지 표현
-================================
-
-다음 표현은 절대 사용하지 마:
-
-하고 싶어
-가고 싶어
-놀고 싶어
-너무 좋아
-하루
-오전
-오후
-
-또한 지나치게 시적이거나
-어려운 표현을 사용하지 마.
-
-
-================================
-문장 끝
-================================
-
-다음으로 끝내지 마:
-
-~다
-~합니다
-~입니다
-~해요
-~어요
-~네요
-~요
-
-문장 끝에는 마침표나 느낌표를 붙이지 마.
-
-
-================================
-지역명
-================================
-
-여행지 이름과 지역 이름은
-절대로 문구에 포함하지 마.
-
-여행지 이름은 오직 분위기와 특징을 파악하기 위한
-참고 정보로만 사용해.
-
-
-================================
-최종 조건
-================================
-
-- 15~25자 내외
-- 한 줄
-- 감성적이고 깔끔하게
-- 크레파스 그림 같은 따뜻함
-- 아기자기하지만 유치하지 않게
-- 여행지의 가장 높은 테마가 느껴지게
-- 같은 표현 반복하지 않기
-- 지역명 넣지 않기
-- 마침표 사용하지 않기
-- 느낌표 사용하지 않기
-- 이모지 사용하지 않기
-- 오전, 오후, 하루 등 특정 기간 또는 ~곳과 같이 장소를 암시하는 단어로 끝내지 않기
-- ~요, ~다 등 종결어미로 끝내지 않기
-
-위의 예시 문장을 그대로 복사하지 말고
-새로운 문구를 만들어줘.
-
-한줄평 하나만 출력해줘.
+출력은 반드시 문구 하나만, 다른 설명이나 인사말 없이 작성하세요.
 """
 
-
-    # --------------------------------------------------
-    # 6. OpenAI 호출
-    # --------------------------------------------------
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=1.0,
-        max_tokens=50,
-    )
-
-
-    # --------------------------------------------------
-    # 7. 결과 정리
-    # --------------------------------------------------
-
-    review = response.choices[0].message.content.strip()
-
-    # 혹시 붙어 있을 수 있는 문장부호 제거
-    review = review.rstrip(".。!?！")
-
-    return review
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100,
+            temperature=0.8,
+        )
+        text = response.choices[0].message.content.strip()
+        emoji = get_clover_emoji()
+        return f"{text}{emoji}"
+    except Exception as e:
+        print(f"[generate_one_line_review] AI 호출 실패: {e}")
+        return f"당신의 취향에 꼭 맞는 여행지를 찾았어요!{get_clover_emoji()}"
