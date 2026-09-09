@@ -11,8 +11,30 @@ from app.recommendation.route_optimizer import (
 from app.schemas.routes import (
     RouteOptimizeRequest,
     RouteOptimizeResponse,
+    RouteSpotResponse,
     RouteSaveRequest,
 )
+
+
+def attach_segment_info_to_spots(
+    spots: list[dict],
+    segments: list[dict],
+) -> list[RouteSpotResponse]:
+    route_spots = []
+
+    for index, spot in enumerate(spots):
+        segment = segments[index - 1] if index > 0 and index - 1 < len(segments) else {}
+
+        route_spots.append(
+            RouteSpotResponse(
+                **spot,
+                distance_from_prev_km=segment.get("distance_km"),
+                duration_from_prev_minutes=segment.get("duration_minutes"),
+            )
+        )
+
+    return route_spots
+
 
 def create_optimized_route(
     request: RouteOptimizeRequest,
@@ -34,7 +56,10 @@ def create_optimized_route(
         )
 
         result[day] = {
-            "spots": ordered_spots,
+            "spots": attach_segment_info_to_spots(
+                ordered_spots,
+                real_info["segments"],
+            ),
             "total_distance_km": real_info["distance_km"],
             "total_duration_minutes": real_info["duration_minutes"],
             "segments": real_info["segments"],
