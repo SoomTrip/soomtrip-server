@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     map_api_key: str=""
     ai_api_key: str = ""
 
+    naver_client_id: str = ""
+    naver_client_secret: str = ""
+    tmap_app_key: str = ""
+
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "diary-images"
