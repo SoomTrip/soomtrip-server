@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict
 
 from typing import Literal
 
+from app.db.models import SavedRegionShareStatus
+
 MobilityChoice = Literal["walk_transit", "car"]
 
 
@@ -35,6 +37,27 @@ class SavedRegionSpotResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SavedRegionShareUserResponse(BaseModel):
+    user_id: int
+    nickname: str
+    profile_image: str | None = None
+
+
+class SavedRegionSharedFromResponse(BaseModel):
+    share_id: int
+    user_id: int
+    nickname: str
+    profile_image: str | None = None
+
+
+class SavedRegionSharedToResponse(BaseModel):
+    share_id: int
+    user_id: int
+    nickname: str
+    profile_image: str | None = None
+    status: SavedRegionShareStatus
+
+
 class SavedRegionResponse(BaseModel):
     id: int
     user_id: int
@@ -42,17 +65,22 @@ class SavedRegionResponse(BaseModel):
     score: int | None = None
     mobility_choice: MobilityChoice | None = None
     created_at: datetime
+
+    shared_from: SavedRegionSharedFromResponse | None = None
+    shared_to: list[SavedRegionSharedToResponse] = []
+
     spots: list[SavedRegionSpotResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class SavedRegionShareRequest(BaseModel):
     friend_user_ids: list[int]
 
 
-class SavedRegionShareSuccess(BaseModel):
+class SavedRegionShareCreateSuccess(BaseModel):
     friend_user_id: int
-    saved_region_id: int
+    share_id: int
 
 
 class SavedRegionShareFailure(BaseModel):
@@ -60,6 +88,34 @@ class SavedRegionShareFailure(BaseModel):
     reason: str
 
 
-class SavedRegionShareResponse(BaseModel):
-    shared: list[SavedRegionShareSuccess]
+class SavedRegionShareCreateResponse(BaseModel):
+    created: list[SavedRegionShareCreateSuccess]
     failed: list[SavedRegionShareFailure]
+
+
+class SavedRegionShareListItem(BaseModel):
+    share_id: int
+    saved_region_id: int
+    region_name: str
+    status: SavedRegionShareStatus
+    created_at: datetime
+    responded_at: datetime | None = None
+
+    sender_id: int
+    sender_nickname: str
+    sender_profile_image: str | None = None
+
+    receiver_id: int
+    receiver_nickname: str
+    receiver_profile_image: str | None = None
+
+
+class SavedRegionShareAcceptResponse(BaseModel):
+    share_id: int
+    status: SavedRegionShareStatus
+    cloned_saved_region_id: int
+
+
+class SavedRegionShareRejectResponse(BaseModel):
+    share_id: int
+    status: SavedRegionShareStatus
