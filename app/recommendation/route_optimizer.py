@@ -70,12 +70,62 @@ def split_route_by_days(full_route: list[dict], num_days: int) -> dict[str, list
     return result
 
 
+def _balance_category_by_swap(
+    route_by_day: dict[str, list[dict]],
+    days: list[str],
+    category: str,
+) -> None:
+    """
+    category 스팟이 날짜별로 최대-최소 차이 1 이하가 되도록,
+    가장 많이 가진 날짜의 category 스팟 하나와 가장 적게 가진 날짜의
+    "다른 카테고리" 스팟 하나를 맞바꾼다.
+    도네이션이 아니라 교환(swap)이라, 두 날짜의 총 방문지 개수는 그대로 유지된다.
+    (다른 카테고리의 균형을 최대한 덜 건드리도록, 음식이 아닌 스팟을 우선 골라 교환한다)
+    """
+    def count(day: str) -> int:
+        return sum(1 for s in route_by_day[day] if s.get("category_label") == category)
+
+    counts = {day: count(day) for day in days}
+    total = sum(counts.values())
+    if total == 0:
+        return
+
+    for _ in range(total * len(days)):  # 안전장치: 스왑 횟수 상한
+        donor_day = max(days, key=lambda d: counts[d])
+        receiver_day = min(days, key=lambda d: counts[d])
+        if counts[donor_day] - counts[receiver_day] <= 1:
+            break
+
+        donor_spot = next(
+            (s for s in route_by_day[donor_day] if s.get("category_label") == category),
+            None,
+        )
+        receiver_spot = next(
+            (s for s in route_by_day[receiver_day]
+             if s.get("category_label") not in FOOD_CATEGORIES and s.get("category_label") != category),
+            None,
+        ) or next(
+            (s for s in route_by_day[receiver_day] if s.get("category_label") != category),
+            None,
+        )
+        if donor_spot is None or receiver_spot is None:
+            break  # 교환할 상대가 없으면 더 진행 불가
+
+        route_by_day[donor_day].remove(donor_spot)
+        route_by_day[receiver_day].remove(receiver_spot)
+        route_by_day[donor_day].append(receiver_spot)
+        route_by_day[receiver_day].append(donor_spot)
+
+        counts[donor_day] -= 1
+        counts[receiver_day] += 1
+
+
 def ensure_food_per_day(route_by_day: dict[str, list[dict]]) -> dict[str, list[dict]]:
     """
     날짜별 거리 기반 분할(split_route_by_days)의 결과를 유지하되,
-    식당/카페를 포함한 모든 카테고리가 날짜 간 극단적으로 몰리지 않도록
-    "가장 가까운 다른 날짜"와 교환하며 완화한다.
-    완전한 균등 분배가 아니라, 거리를 해치지 않는 선에서의 보정.
+    식당/카페를 포함한 모든 카테고리가 날짜 간 최대한 균등하게 퍼지도록
+    "같은 크기를 유지하는 교환(swap)"으로 보정한다.
+    스왑이라 각 날짜의 총 방문지 개수는 split_route_by_days가 만든 그대로 유지된다.
     """
     days = list(route_by_day.keys())
     num_days = len(days)
@@ -83,39 +133,18 @@ def ensure_food_per_day(route_by_day: dict[str, list[dict]]) -> dict[str, list[d
     if num_days <= 1:
         return route_by_day
 
-    # 카테고리별로 날짜마다 몇 개씩 있는지 집계
-    from collections import defaultdict
-    category_counts_by_day = {
-        day: defaultdict(int) for day in days
-    }
-    for day in days:
-        for spot in route_by_day[day]:
-            category_counts_by_day[day][spot.get("category_label", "기타")] += 1
-
     all_categories = set()
     for day in days:
-        all_categories.update(category_counts_by_day[day].keys())
+        for spot in route_by_day[day]:
+            all_categories.add(spot.get("category_label", "기타"))
 
-    # 각 카테고리마다, 개수가 0인 날짜가 있고 다른 날짜엔 2개 이상 있으면 하나 옮김
-    for category in all_categories:
-        zero_days = [d for d in days if category_counts_by_day[d][category] == 0]
-        for target_day in zero_days:
-            # 가장 많이 가진 날짜에서 하나를 옮겨옴 (거리상 가장 가까운 스팟을 옮기는 게 이상적이나,
-            # 단순화를 위해 해당 카테고리 중 하나를 이동)
-            donor_day = max(days, key=lambda d: category_counts_by_day[d][category])
-            if category_counts_by_day[donor_day][category] <= 1:
-                continue  # 하나뿐이면 그 날짜의 유일한 카테고리이니 옮기지 않음
+    # 식당/카페를 마지막에 처리해서, 다른 카테고리를 맞추다가 식당/카페 균형이
+    # 다시 깨지는 일이 없도록 한다 (사용자가 가장 신경 쓰는 카테고리이므로 우선순위 높임)
+    ordered_categories = [c for c in all_categories if c not in FOOD_CATEGORIES]
+    ordered_categories += [c for c in FOOD_CATEGORIES if c in all_categories]
 
-            # donor_day에서 해당 카테고리 스팟 하나 찾기
-            spot_to_move = next(
-                (s for s in route_by_day[donor_day] if s.get("category_label") == category),
-                None
-            )
-            if spot_to_move:
-                route_by_day[donor_day].remove(spot_to_move)
-                route_by_day[target_day].append(spot_to_move)
-                category_counts_by_day[donor_day][category] -= 1
-                category_counts_by_day[target_day][category] += 1
+    for category in ordered_categories:
+        _balance_category_by_swap(route_by_day, days, category)
 
     return route_by_day
 
@@ -198,8 +227,9 @@ def get_route_response(request: RouteRequest) -> RouteResponse:
 
     처리 순서:
     1) 전체 선택 장소를 거리+카테고리 다양성 고려해 하나의 순서로 정렬
-    2) 여행 일수만큼 균등하게 날짜별로 분할 (지리적으로 자연스럽게 묶임)
-    3) 각 날짜에 식당/카페가 최소 1개는 포함되도록 보정
+    2) 여행 일수만큼 날짜별로 분할 — 관광지는 위치 기준으로 균등하게,
+       식당/카페는 각각 전체 경로상 등장 순서를 기준으로 날짜에 균등하게 배분
+    3) 그래도 특정 카테고리가 0개인 날짜가 남아있으면 보정
     4) 각 날짜 안에서 식당/카페가 전체에 고르게 퍼지도록 재배치
        (식당끼리 연속되거나 한쪽에 몰리지 않도록)
     """
