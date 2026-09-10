@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.db.models import (
     DiaryEntry,
@@ -7,6 +8,7 @@ from app.db.models import (
     RefreshToken,
     RouteEntry,
     SavedRegion,
+    SavedRegionShare,
     SavedRegionSpot,
     Stamp,
     User,
@@ -54,7 +56,21 @@ def delete_user(
         )
     ]
 
+    db.query(SavedRegionShare).filter(
+        or_(
+            SavedRegionShare.sender_id == user_id,
+            SavedRegionShare.receiver_id == user_id,
+        )
+    ).delete(synchronize_session=False)
+
     if saved_region_ids:
+        db.query(SavedRegionShare).filter(
+            or_(
+                SavedRegionShare.saved_region_id.in_(saved_region_ids),
+                SavedRegionShare.cloned_saved_region_id.in_(saved_region_ids),
+            )
+        ).delete(synchronize_session=False)
+
         db.query(RouteEntry).filter(
             RouteEntry.saved_region_id.in_(saved_region_ids)
         ).delete(synchronize_session=False)
@@ -72,6 +88,7 @@ def delete_user(
         ]
 
         delete_diary_images_from_supabase(diary_image_paths)
+
         db.query(DiaryEntry).filter(
             DiaryEntry.saved_region_id.in_(saved_region_ids)
         ).delete(synchronize_session=False)
