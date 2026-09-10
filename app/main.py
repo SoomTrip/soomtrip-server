@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+
 from app.api.health import router as health_router
 
 from app.api.auth import router as auth_router
@@ -15,7 +17,14 @@ from app.api.uploads import router as uploads_router
 from app.api.routes import router as routes_router
 from app.api.stamps import router as stamps_router
 
-app = FastAPI()
+if settings.app_env == "production":
+    app = FastAPI(
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+else:
+    app = FastAPI()
 
 
 @app.get("/")
@@ -35,3 +44,7 @@ app.include_router(diary_entries_router)
 app.include_router(uploads_router)
 app.include_router(routes_router)
 app.include_router(stamps_router)
+
+@app.get("/privacy", include_in_schema=False)
+def privacy():
+    return FileResponse("app/templates/privacy.html")
