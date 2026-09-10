@@ -1,5 +1,8 @@
 from sqlalchemy.orm import Session
 
+from app.external.map_api.naver_client import get_driving_route_info
+from app.schemas.routes import RouteMobilityOption
+
 from app.db.models import RouteEntry, SavedRegion, SavedRegionSpot
 from app.recommendation.route_optimizer import (
     ensure_food_per_day,
@@ -19,17 +22,34 @@ from app.schemas.routes import (
 def attach_segment_info_to_spots(
     spots: list[dict],
     segments: list[dict],
+    car_segments: list[dict] | None = None,
 ) -> list[RouteSpotResponse]:
     route_spots = []
 
     for index, spot in enumerate(spots):
         segment = segments[index - 1] if index > 0 and index - 1 < len(segments) else {}
+        car_segment = (
+            car_segments[index - 1]
+            if car_segments is not None and index > 0 and index - 1 < len(car_segments)
+            else None
+        )
+
+        car_alternative = None
+        duration = segment.get("duration_minutes")
+
+        if duration is not None and duration >= 25 and car_segment is not None:
+            car_alternative = RouteMobilityOption(
+                mobility_choice="car",
+                distance_from_prev_km=car_segment.get("distance_km"),
+                duration_from_prev_minutes=car_segment.get("duration_minutes"),
+            )
 
         route_spots.append(
             RouteSpotResponse(
                 **spot,
                 distance_from_prev_km=segment.get("distance_km"),
                 duration_from_prev_minutes=segment.get("duration_minutes"),
+                car_alternative=car_alternative,
             )
         )
 
@@ -71,13 +91,17 @@ def create_optimized_route(
             ordered_spots,
             mobility_choice=mobility_choice,
         )
-        #print("[Route Optimize mobility_choice]", mobility_choice)
-        #print("[Route Optimize real_info]", real_info)
+
+        car_segments = None
+        if mobility_choice == "walk_transit":
+            car_info = get_driving_route_info(ordered_spots)
+            car_segments = car_info["segments"]
 
         result[day] = {
             "spots": attach_segment_info_to_spots(
                 ordered_spots,
                 real_info["segments"],
+                car_segments,
             ),
             "total_distance_km": real_info["distance_km"],
             "total_duration_minutes": real_info["duration_minutes"],
@@ -142,6 +166,20 @@ def save_route_entries(
         db.add(route_entry)
         saved_entries.append(route_entry)
 
+        if entry.car_alternative is not None:
+            car_entry = RouteEntry(
+                saved_region_id=request.saved_region_id,
+                saved_region_spot_id=entry.saved_region_spot_id,
+                visit_day=entry.visit_day,
+                visit_order=entry.visit_order,
+                distance_from_prev_km=entry.car_alternative.distance_from_prev_km,
+                duration_from_prev_minutes=entry.car_alternative.duration_from_prev_minutes,
+                mobility_choice="car",
+            )
+
+            db.add(car_entry)
+            saved_entries.append(car_entry)
+
     db.commit()
 
     for entry in saved_entries:
@@ -180,23 +218,41 @@ def get_saved_route_by_region(
         spot = entry.saved_region_spot
         day_key = f"day{entry.visit_day}"
 
-        route_by_day.setdefault(day_key, []).append({
-            "route_entry_id": entry.id,
-            "saved_region_spot_id": entry.saved_region_spot_id,
-            "visit_day": entry.visit_day,
-            "visit_order": entry.visit_order,
-            "content_id": spot.content_id,
-            "name": spot.name,
-            "category_label": spot.category_label,
-            "latitude": spot.latitude,
-            "longitude": spot.longitude,
-            "is_anchor": spot.is_anchor,
+        route_by_day.setdefault(day_key, {})
+
+        group_key = (
+            entry.saved_region_spot_id,
+            entry.visit_day,
+            entry.visit_order,
+        )
+
+        if group_key not in route_by_day[day_key]:
+            route_by_day[day_key][group_key] = {
+                "route_entry_id": entry.id,
+                "saved_region_spot_id": entry.saved_region_spot_id,
+                "visit_day": entry.visit_day,
+                "visit_order": entry.visit_order,
+                "content_id": spot.content_id,
+                "name": spot.name,
+                "category_label": spot.category_label,
+                "latitude": spot.latitude,
+                "longitude": spot.longitude,
+                "is_anchor": spot.is_anchor,
+                "mobility_options": [],
+            }
+
+        route_by_day[day_key][group_key]["mobility_options"].append({
+            "mobility_choice": entry.mobility_choice,
             "distance_from_prev_km": entry.distance_from_prev_km,
             "duration_from_prev_minutes": entry.duration_from_prev_minutes,
-            "mobility_choice": entry.mobility_choice,
         })
 
     return {
         "saved_region_id": saved_region_id,
-        "route_by_day": route_by_day,
+        "route_by_day": {
+            day: list(spots_by_key.values())
+            for day, spots_by_key in route_by_day.items()
+        },
     }
+
+    

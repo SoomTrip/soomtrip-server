@@ -11,9 +11,16 @@ class RouteOptimizeRequest(BaseModel):
     num_days: int = 1
 
 
+class RouteMobilityOption(BaseModel):
+    mobility_choice: str
+    distance_from_prev_km: float | None = None
+    duration_from_prev_minutes: int | None = None
+
+
 class RouteSpotResponse(NearbySpot):
     distance_from_prev_km: float | None = None
     duration_from_prev_minutes: int | None = None
+    car_alternative: RouteMobilityOption | None = None
 
 
 class RouteDayResponse(BaseModel):
@@ -33,6 +40,7 @@ class RouteEntrySaveRequest(BaseModel):
     visit_order: int
     distance_from_prev_km: float | None = None
     duration_from_prev_minutes: int | None = None
+    car_alternative: RouteMobilityOption | None = None
 
 
 class RouteSaveRequest(BaseModel):
@@ -58,7 +66,7 @@ class RouteSaveResponse(BaseModel):
     entries: list[RouteEntryResponse]
 
 class SavedRouteSpotResponse(BaseModel):
-    route_entry_id: int
+    route_entry_id: int | None = None
     saved_region_spot_id: int
     visit_day: int
     visit_order: int
@@ -70,9 +78,7 @@ class SavedRouteSpotResponse(BaseModel):
     longitude: float | None = None
     is_anchor: bool
 
-    distance_from_prev_km: float | None = None
-    duration_from_prev_minutes: int | None = None
-    mobility_choice: str | None = None
+    mobility_options: list[RouteMobilityOption]
 
 
 class SavedRouteResponse(BaseModel):
