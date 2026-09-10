@@ -97,3 +97,39 @@ def create_diary_image_signed_url(
         return signed_url
 
     return f"{settings.supabase_url}/storage/v1{signed_url}"
+
+def delete_diary_images_from_supabase(
+    image_paths: list[str],
+) -> None:
+    if not image_paths:
+        return
+
+    if not settings.supabase_url:
+        raise ValueError("SUPABASE_URL_NOT_SET")
+
+    if not settings.supabase_service_role_key:
+        raise ValueError("SUPABASE_SERVICE_ROLE_KEY_NOT_SET")
+
+    bucket = settings.supabase_storage_bucket
+
+    delete_url = (
+        f"{settings.supabase_url}/storage/v1/object/"
+        f"{bucket}"
+    )
+
+    response = httpx.request(
+        "DELETE",
+        delete_url,
+        headers={
+            "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            "apikey": settings.supabase_service_role_key,
+            "Content-Type": "application/json",
+        },
+        json={
+            "prefixes": image_paths,
+        },
+        timeout=30,
+    )
+
+    if response.status_code >= 400:
+        raise ValueError("IMAGE_DELETE_FAILED")

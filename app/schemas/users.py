@@ -18,3 +18,7 @@ class UserMeResponse(BaseModel):
 class UserUpdateRequest(BaseModel):
     nickname: str | None = None
     profile_image: str | None = None
+
+
+class UserDeleteResponse(BaseModel):
+    message: str
