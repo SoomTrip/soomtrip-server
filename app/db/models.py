@@ -168,6 +168,32 @@ class RouteEntry(Base):
     saved_region_spot = relationship("SavedRegionSpot")
 
 
+class SavedRegionShareStatus(str, enum.Enum):
+    PENDING = "PENDING"   # 공유함, 아직 상대 수락 안함
+    ACCEPTED = "ACCEPTED" # 수락 완료 (받은 사람 저장 목록에 복제됨)
+    REJECTED = "REJECTED" # 거절됨
+
+
+class SavedRegionShare(Base):
+    """친구에게 저장한 여행지를 공유하는 요청. 수락되면 saved_region이
+    receiver 소유로 복제되고(clone), cloned_saved_region_id에 그 결과가 남는다."""
+    __tablename__ = "saved_region_shares"
+
+    id = Column(Integer, primary_key=True)
+    saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=False)  # 공유하는 원본 여행지
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)     # 공유한 사람
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)   # 공유받은 사람
+    status = Column(Enum(SavedRegionShareStatus), default=SavedRegionShareStatus.PENDING, nullable=False)
+    cloned_saved_region_id = Column(Integer, ForeignKey("saved_regions.id"), nullable=True)  # 수락 시 생성된 receiver의 복제본
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 공유 보낸 시각
+    responded_at = Column(DateTime(timezone=True), nullable=True)             # 수락/거절된 시각
+
+    saved_region = relationship("SavedRegion", foreign_keys=[saved_region_id])
+    cloned_saved_region = relationship("SavedRegion", foreign_keys=[cloned_saved_region_id])
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])
+
+
 class RefreshToken(Base):
     """자체 발급 Refresh Token 관리 (원문이 아닌 hash만 저장)"""
     __tablename__ = "refresh_tokens"
