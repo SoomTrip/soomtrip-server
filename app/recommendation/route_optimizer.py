@@ -154,7 +154,7 @@ def interleave_food_evenly(route: list[dict]) -> list[dict]:
     관광지 전체 구간에 식당과 카페를 각각 독립적으로 고르게 분산 배치한다.
     식당끼리도, 카페끼리도 연속되지 않도록 처리.
     """
-    non_food = [s for s in route if s.get("category_label") not in ["식당", "카페"]]
+    non_food = [s for s in route if s.get("category_label") not in FOOD_CATEGORIES]
     restaurants = [s for s in route if s.get("category_label") == "식당"]
     cafes = [s for s in route if s.get("category_label") == "카페"]
 
@@ -208,15 +208,24 @@ def interleave_food_evenly(route: list[dict]) -> list[dict]:
 
     result = [s for s in result if s is not None]
 
-    # 5. 최종 안전장치: 연속된 같은 카테고리가 있으면 뒤쪽 관광지와 자리 교환
+    # 5. 최종 안전장치: 연속된 같은 카테고리가 있으면 관광지와 자리 교환.
+    # 뒤쪽에 바꿀 관광지가 없으면(예: 관광지 1개 + 식당 2개처럼 뒤쪽이 전부 음식인 경우)
+    # 앞쪽에서 찾아서라도 교환한다.
     for i in range(len(result) - 1):
         curr = result[i].get("category_label")
         next_ = result[i + 1].get("category_label")
-        if curr in ["식당", "카페"] and curr == next_:
+        if curr in FOOD_CATEGORIES and curr == next_:
+            swapped = False
             for j in range(i + 2, len(result)):
-                if result[j].get("category_label") not in ["식당", "카페"]:
+                if result[j].get("category_label") not in FOOD_CATEGORIES:
                     result[i + 1], result[j] = result[j], result[i + 1]
+                    swapped = True
                     break
+            if not swapped:
+                for j in range(i - 1, -1, -1):
+                    if result[j].get("category_label") not in FOOD_CATEGORIES:
+                        result[i], result[j] = result[j], result[i]
+                        break
 
     return result
 
