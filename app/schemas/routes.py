@@ -15,11 +15,14 @@ class RouteMobilityOption(BaseModel):
     mobility_choice: str
     distance_from_prev_km: float | None = None
     duration_from_prev_minutes: int | None = None
+    is_fallback: bool = False
 
 
 class RouteSpotResponse(NearbySpot):
     distance_from_prev_km: float | None = None
     duration_from_prev_minutes: int | None = None
+    mobility_used: str | None = None
+    is_fallback: bool = False
     car_alternative: RouteMobilityOption | None = None
 
 
@@ -40,6 +43,8 @@ class RouteEntrySaveRequest(BaseModel):
     visit_order: int
     distance_from_prev_km: float | None = None
     duration_from_prev_minutes: int | None = None
+    mobility_used: str | None = None
+    is_fallback: bool = False
     car_alternative: RouteMobilityOption | None = None
 
 

@@ -109,7 +109,7 @@ def get_walking_route_info(route: list[dict]) -> dict:
                         "to": end.get("name", f"지점{i+2}"),
                         "distance_km": fallback_result["distance_km"],
                         "duration_minutes": fallback_result["duration_minutes"],
-                        "mobility_used": "car",
+                        "mobility_used": "fallback_car",
                         "car_alternative": None,
                     })
                     continue
