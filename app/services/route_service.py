@@ -35,20 +35,35 @@ def attach_segment_info_to_spots(
         )
 
         car_alternative = None
+        mobility_used = segment.get("mobility_used")
+        is_fallback = mobility_used == "fallback_car"
         duration = segment.get("duration_minutes")
 
-        if duration is not None and duration >= 25 and car_segment is not None:
-            car_alternative = RouteMobilityOption(
-                mobility_choice="car",
-                distance_from_prev_km=car_segment.get("distance_km"),
-                duration_from_prev_minutes=car_segment.get("duration_minutes"),
-            )
+        segment_car_alternative = segment.get("car_alternative")
+
+        if duration is not None and duration >= 25:
+            if segment_car_alternative is not None:
+                car_alternative = RouteMobilityOption(
+                    mobility_choice="car",
+                    distance_from_prev_km=segment_car_alternative.get("distance_km"),
+                    duration_from_prev_minutes=segment_car_alternative.get("duration_minutes"),
+                    is_fallback=False,
+                )
+            elif car_segment is not None:
+                car_alternative = RouteMobilityOption(
+                    mobility_choice="car",
+                    distance_from_prev_km=car_segment.get("distance_km"),
+                    duration_from_prev_minutes=car_segment.get("duration_minutes"),
+                    is_fallback=False,
+                )
 
         route_spots.append(
             RouteSpotResponse(
                 **spot,
                 distance_from_prev_km=segment.get("distance_km"),
                 duration_from_prev_minutes=segment.get("duration_minutes"),
+                mobility_used=mobility_used,
+                is_fallback=is_fallback,
                 car_alternative=car_alternative,
             )
         )
@@ -92,16 +107,10 @@ def create_optimized_route(
             mobility_choice=mobility_choice,
         )
 
-        car_segments = None
-        if mobility_choice == "walk_transit":
-            car_info = get_driving_route_info(ordered_spots)
-            car_segments = car_info["segments"]
-
         result[day] = {
             "spots": attach_segment_info_to_spots(
                 ordered_spots,
                 real_info["segments"],
-                car_segments,
             ),
             "total_distance_km": real_info["distance_km"],
             "total_duration_minutes": real_info["duration_minutes"],
@@ -160,7 +169,7 @@ def save_route_entries(
             visit_order=entry.visit_order,
             distance_from_prev_km=entry.distance_from_prev_km,
             duration_from_prev_minutes=entry.duration_from_prev_minutes,
-            mobility_choice=mobility_choice,
+            mobility_choice=entry.mobility_used or mobility_choice,
         )
 
         db.add(route_entry)
@@ -245,6 +254,7 @@ def get_saved_route_by_region(
             "mobility_choice": entry.mobility_choice,
             "distance_from_prev_km": entry.distance_from_prev_km,
             "duration_from_prev_minutes": entry.duration_from_prev_minutes,
+            "is_fallback": entry.mobility_choice == "fallback_car",
         })
 
     return {
