@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.models import RouteEntry
 
 
-ROUTE_DATA_TTL = timedelta(hours=24)
+ROUTE_DATA_TTL = timedelta(hours=23)
 
 
 def cleanup_expired_route_data(db: Session) -> int:
