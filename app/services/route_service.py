@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
 
-from app.external.map_api.naver_client import get_driving_route_info
 from app.schemas.routes import RouteMobilityOption
 
 from app.db.models import RouteEntry, SavedRegion, SavedRegionSpot
@@ -17,6 +17,8 @@ from app.schemas.routes import (
     RouteSpotResponse,
     RouteSaveRequest,
 )
+
+ROUTE_CACHE_TTL = timedelta(hours=24)
 
 
 def attach_segment_info_to_spots(
@@ -196,6 +198,150 @@ def save_route_entries(
 
     return saved_entries
 
+def normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+
+    return value.astimezone(timezone.utc)
+
+
+def is_route_cache_expired(route_entries: list[RouteEntry]) -> bool:
+    if not route_entries:
+        return False
+
+    created_ats = [
+        normalize_datetime(entry.created_at)
+        for entry in route_entries
+        if entry.created_at is not None
+    ]
+
+    if not created_ats:
+        return True
+
+    oldest_created_at = min(created_ats)
+
+    return datetime.now(timezone.utc) - oldest_created_at >= ROUTE_CACHE_TTL
+
+
+def saved_region_spot_to_route_spot(spot: SavedRegionSpot) -> dict:
+    return {
+        "content_id": spot.content_id,
+        "name": spot.name,
+        "address": "",
+        "latitude": spot.latitude,
+        "longitude": spot.longitude,
+        "image_url": None,
+        "cat1": None,
+        "category_label": spot.category_label,
+    }
+
+def refresh_expired_route_entries(
+    db: Session,
+    saved_region: SavedRegion,
+    route_entries: list[RouteEntry],
+) -> list[RouteEntry]:
+    route_groups = {}
+
+    for entry in route_entries:
+        group_key = (
+            entry.visit_day,
+            entry.visit_order,
+            entry.saved_region_spot_id,
+        )
+
+        if group_key not in route_groups:
+            route_groups[group_key] = {
+                "visit_day": entry.visit_day,
+                "visit_order": entry.visit_order,
+                "saved_region_spot_id": entry.saved_region_spot_id,
+                "spot": entry.saved_region_spot,
+            }
+
+    ordered_groups = sorted(
+        route_groups.values(),
+        key=lambda item: (item["visit_day"], item["visit_order"]),
+    )
+
+    db.query(RouteEntry).filter(
+        RouteEntry.saved_region_id == saved_region.id
+    ).delete(synchronize_session=False)
+
+    mobility_choice = saved_region.mobility_choice or "car"
+    refreshed_entries = []
+
+    days = sorted({group["visit_day"] for group in ordered_groups})
+
+    for day in days:
+        day_groups = [
+            group
+            for group in ordered_groups
+            if group["visit_day"] == day
+        ]
+
+        ordered_spots = [
+            saved_region_spot_to_route_spot(group["spot"])
+            for group in day_groups
+        ]
+
+        real_info = get_real_route_info(
+            ordered_spots,
+            mobility_choice=mobility_choice,
+        )
+
+        route_spots = attach_segment_info_to_spots(
+            ordered_spots,
+            real_info["segments"],
+        )
+
+        for index, route_spot in enumerate(route_spots):
+            group = day_groups[index]
+
+            route_mobility_choice = (
+                "fallback_car"
+                if route_spot.is_fallback
+                else route_spot.mobility_used or mobility_choice
+            )
+
+            route_entry = RouteEntry(
+                saved_region_id=saved_region.id,
+                saved_region_spot_id=group["saved_region_spot_id"],
+                visit_day=group["visit_day"],
+                visit_order=group["visit_order"],
+                distance_from_prev_km=route_spot.distance_from_prev_km,
+                duration_from_prev_minutes=route_spot.duration_from_prev_minutes,
+                mobility_choice=route_mobility_choice,
+            )
+
+            db.add(route_entry)
+            refreshed_entries.append(route_entry)
+
+            if route_spot.car_alternative is not None:
+                car_entry = RouteEntry(
+                    saved_region_id=saved_region.id,
+                    saved_region_spot_id=group["saved_region_spot_id"],
+                    visit_day=group["visit_day"],
+                    visit_order=group["visit_order"],
+                    distance_from_prev_km=route_spot.car_alternative.distance_from_prev_km,
+                    duration_from_prev_minutes=route_spot.car_alternative.duration_from_prev_minutes,
+                    mobility_choice=route_spot.car_alternative.mobility_choice,
+                )
+
+                db.add(car_entry)
+                refreshed_entries.append(car_entry)
+
+    db.commit()
+
+    for entry in refreshed_entries:
+        db.refresh(entry)
+
+    return (
+        db.query(RouteEntry)
+        .join(SavedRegionSpot, RouteEntry.saved_region_spot_id == SavedRegionSpot.id)
+        .filter(RouteEntry.saved_region_id == saved_region.id)
+        .order_by(RouteEntry.visit_day.asc(), RouteEntry.visit_order.asc())
+        .all()
+    )
+
 def get_saved_route_by_region(
     db: Session,
     user_id: int,
@@ -220,6 +366,13 @@ def get_saved_route_by_region(
         .order_by(RouteEntry.visit_day.asc(), RouteEntry.visit_order.asc())
         .all()
     )
+
+    if is_route_cache_expired(route_entries):
+        route_entries = refresh_expired_route_entries(
+            db=db,
+            saved_region=saved_region,
+            route_entries=route_entries,
+        )
 
     route_by_day = {}
 
