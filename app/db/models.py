@@ -15,6 +15,7 @@ class User(Base):
     user_code = Column(String, unique=True, index=True, nullable=False, default=lambda: uuid.uuid4().hex[:10]) # 친구추가용 고유 코드
     profile_image = Column(String, nullable=True)  # 프로필 사진 URL
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    onboarding_completed = Column(Boolean, default=False, nullable=False)
 
 
 class FriendStatus(str, enum.Enum):
