@@ -32,17 +32,8 @@ async def get_kakao_user(kakao_access_token: str) -> dict:
 def get_or_create_user_by_kakao(
     db: Session,
     kakao_user: dict,
-) -> User:
+) -> dict:
     kakao_id = str(kakao_user["id"])
-
-    user = (
-        db.query(User)
-        .filter(User.kakao_id == kakao_id)
-        .first()
-    )
-
-    if user is not None:
-        return user
 
     properties = kakao_user.get("properties") or {}
     kakao_account = kakao_user.get("kakao_account") or {}
@@ -59,17 +50,24 @@ def get_or_create_user_by_kakao(
         or profile.get("profile_image_url")
     )
 
-    user = User(
-        kakao_id=kakao_id,
-        nickname=nickname,
-        profile_image=profile_image,
-    )
+    user = db.query(User).filter(User.kakao_id == kakao_id).first()
+    is_new_user = user is None
 
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    if user is None:
+        user = User(
+            kakao_id=kakao_id,
+            nickname=nickname,
+            profile_image=profile_image,
+            onboarding_completed=False,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    return user
+    return {
+        "user": user,
+        "is_new_user": is_new_user,
+    }
 
 def issue_refresh_token(
     db: Session,

@@ -10,6 +10,9 @@ class LoginResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    is_new_user: bool
+    onboarding_completed: bool
+    
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str

@@ -121,3 +121,14 @@ def delete_user(
     db.commit()
 
     return True
+
+def complete_onboarding(
+    db: Session,
+    user: User,
+) -> User:
+    user.onboarding_completed = True
+
+    db.commit()
+    db.refresh(user)
+
+    return user
