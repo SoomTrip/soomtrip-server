@@ -43,10 +43,12 @@ async def kakao_login(
             detail="유효하지 않은 카카오 액세스 토큰입니다.",
         ) from exc
 
-    user = get_or_create_user_by_kakao(
+    login_result = get_or_create_user_by_kakao(
         db=db,
         kakao_user=kakao_user,
     )
+
+    user = login_result["user"]
 
     soomtrip_access_token = create_access_token(
         str(user.id)
@@ -61,6 +63,8 @@ async def kakao_login(
         "access_token": soomtrip_access_token,
         "refresh_token": soomtrip_refresh_token,
         "token_type": "bearer",
+        "is_new_user": login_result["is_new_user"],
+        "onboarding_completed": user.onboarding_completed,
     }
 
 

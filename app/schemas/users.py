@@ -9,6 +9,7 @@ class UserMeResponse(BaseModel):
     nickname: str
     user_code: str
     profile_image: str | None = None
+    onboarding_completed: bool
     created_at: datetime
 
     class Config:
