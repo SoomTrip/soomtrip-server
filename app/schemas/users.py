@@ -10,11 +10,17 @@ class UserMeResponse(BaseModel):
     user_code: str
     profile_image: str | None = None
     onboarding_completed: bool
+    terms_agreed_at: datetime | None = None
+    privacy_agreed_at: datetime | None = None
     created_at: datetime
 
     class Config:
         from_attributes = True
 
+
+class UserAgreementRequest(BaseModel):
+    terms_agreed: bool
+    privacy_agreed: bool
 
 class UserUpdateRequest(BaseModel):
     nickname: str | None = None

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-
+from datetime import datetime, timezone
 from app.db.models import (
     DiaryEntry,
     Friend,
@@ -127,6 +127,23 @@ def complete_onboarding(
     user: User,
 ) -> User:
     user.onboarding_completed = True
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+def agree_to_required_terms(
+    db: Session,
+    user: User,
+) -> User:
+    now = datetime.now(timezone.utc)
+
+    if user.terms_agreed_at is None:
+        user.terms_agreed_at = now
+
+    if user.privacy_agreed_at is None:
+        user.privacy_agreed_at = now
 
     db.commit()
     db.refresh(user)
