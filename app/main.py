@@ -48,3 +48,8 @@ app.include_router(stamps_router)
 @app.get("/privacy", include_in_schema=False)
 def privacy():
     return FileResponse("app/templates/privacy.html")
+
+
+@app.get("/terms", include_in_schema=False)
+def terms():
+    return FileResponse("app/templates/terms.html")
