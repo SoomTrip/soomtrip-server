@@ -12,6 +12,7 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     is_new_user: bool
     onboarding_completed: bool
+    agreement_required: bool
     
 
 class RefreshTokenRequest(BaseModel):

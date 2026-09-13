@@ -65,6 +65,10 @@ async def kakao_login(
         "token_type": "bearer",
         "is_new_user": login_result["is_new_user"],
         "onboarding_completed": user.onboarding_completed,
+        "agreement_required": (
+            user.terms_agreed_at is None
+            or user.privacy_agreed_at is None
+        ),
     }
 
 

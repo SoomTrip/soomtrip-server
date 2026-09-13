@@ -4,8 +4,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user_id
 from app.db.session import get_db
 
-from app.schemas.users import UserDeleteResponse, UserMeResponse, UserUpdateRequest
+from app.schemas.users import (
+    UserAgreementRequest,
+    UserDeleteResponse,
+    UserMeResponse,
+    UserUpdateRequest,
+)
 from app.services.user_service import (
+    agree_to_required_terms,
     complete_onboarding,
     delete_user,
     get_user_by_id,
@@ -63,6 +69,28 @@ def complete_my_onboarding(
         )
 
     return complete_onboarding(db, user)
+
+@router.patch("/me/agreements", response_model=UserMeResponse)
+def agree_my_required_terms(
+    request: UserAgreementRequest,
+    current_user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    if not request.terms_agreed or not request.privacy_agreed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Required agreements must be accepted.",
+        )
+
+    user = get_user_by_id(db, current_user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    return agree_to_required_terms(db, user)
 
 @router.delete("/me", response_model=UserDeleteResponse)
 def delete_me(
