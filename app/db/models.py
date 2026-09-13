@@ -16,6 +16,8 @@ class User(Base):
     profile_image = Column(String, nullable=True)  # 프로필 사진 URL
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     onboarding_completed = Column(Boolean, default=False, nullable=False)
+    privacy_agreed_at = Column(DateTime(timezone=True), nullable=True)  # 개인정보 수집·이용 동의 시각
+    terms_agreed_at = Column(DateTime(timezone=True), nullable=True)  # 이용약관 동의 시각
 
 
 class FriendStatus(str, enum.Enum):
