@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.models import DiaryEntry, SavedRegion
 from app.schemas.diary_entries import DiaryEntryCreateRequest, DiaryEntryUpdateRequest
 from app.services.stamp_service import create_stamp_if_not_exists
+from app.services.upload_service import delete_diary_images_from_supabase
 
 def create_diary_entry(
     db: Session,
@@ -140,6 +141,11 @@ def delete_my_diary_entry(
 
     if diary_entry is None:
         return False
+
+    image_path = diary_entry.image_url
+
+    if image_path is not None:
+        delete_diary_images_from_supabase([image_path])
 
     db.delete(diary_entry)
     db.commit()
