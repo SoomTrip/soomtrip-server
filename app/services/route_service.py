@@ -18,7 +18,7 @@ from app.schemas.routes import (
     RouteSaveRequest,
 )
 
-ROUTE_CACHE_TTL = timedelta(hours=24)
+ROUTE_CACHE_TTL = timedelta(hours=23)
 
 
 def attach_segment_info_to_spots(
@@ -209,6 +209,19 @@ def is_route_cache_expired(route_entries: list[RouteEntry]) -> bool:
     if not route_entries:
         return False
 
+    has_missing_walk_route_data = any(
+        entry.visit_order > 1
+        and entry.mobility_choice == "walk_transit"
+        and (
+            entry.distance_from_prev_km is None
+            or entry.duration_from_prev_minutes is None
+        )
+        for entry in route_entries
+    )
+
+    if has_missing_walk_route_data:
+        return True
+
     created_ats = [
         normalize_datetime(entry.created_at)
         for entry in route_entries
@@ -221,7 +234,6 @@ def is_route_cache_expired(route_entries: list[RouteEntry]) -> bool:
     oldest_created_at = min(created_ats)
 
     return datetime.now(timezone.utc) - oldest_created_at >= ROUTE_CACHE_TTL
-
 
 def saved_region_spot_to_route_spot(spot: SavedRegionSpot) -> dict:
     return {
