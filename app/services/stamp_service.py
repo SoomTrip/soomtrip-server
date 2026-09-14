@@ -2,7 +2,8 @@ import random
 
 from sqlalchemy.orm import Session
 
-from app.db.models import SavedRegion, Stamp
+from app.db.models import DiaryEntry, SavedRegion, Stamp
+from app.services.upload_service import delete_diary_images_from_supabase
 
 
 DEFAULT_STAMP_ASSET_KEYS = [
@@ -100,8 +101,10 @@ def get_my_stamps(
     db: Session,
     user_id: int,
 ) -> list[dict]:
+    # SavedRegion은 소프트 삭제(deleted_at)만 되고 실제로 지워지지는 않으므로,
+    # 여행지를 지워도 그 여행지에 딸린 도장은 그대로 inner join으로 잘 나온다.
     stamps = (
-        db.query(Stamp, SavedRegion.region_name)
+        db.query(Stamp, SavedRegion.region_name, SavedRegion.deleted_at)
         .join(SavedRegion, Stamp.saved_region_id == SavedRegion.id)
         .filter(Stamp.user_id == user_id)
         .order_by(Stamp.created_at.desc())
@@ -116,6 +119,62 @@ def get_my_stamps(
             "region_name": region_name,
             "stamp_asset_key": stamp.stamp_asset_key,
             "created_at": stamp.created_at,
+            "is_region_deleted": deleted_at is not None,
         }
-        for stamp, region_name in stamps
+        for stamp, region_name, deleted_at in stamps
     ]
+
+
+def delete_stamp(
+    db: Session,
+    user_id: int,
+    stamp_id: int,
+) -> bool:
+    stamp = (
+        db.query(Stamp)
+        .filter(Stamp.id == stamp_id, Stamp.user_id == user_id)
+        .first()
+    )
+
+    if stamp is None:
+        return False
+
+    saved_region = (
+        db.query(SavedRegion)
+        .filter(SavedRegion.id == stamp.saved_region_id)
+        .first()
+    )
+
+    # 아직 저장 목록에 남아있는(=지워지지 않은) 여행지의 도장은 이 방법으로
+    # 지울 수 없다. 여행지 삭제 화면에서 "도장까지 삭제"를 선택하도록 유도한다.
+    if saved_region is not None and saved_region.deleted_at is None:
+        raise ValueError("SAVED_REGION_STILL_ACTIVE")
+
+    diary_image_paths = [
+        image_url
+        for (image_url,) in (
+            db.query(DiaryEntry.image_url)
+            .filter(
+                DiaryEntry.saved_region_id == stamp.saved_region_id,
+                DiaryEntry.image_url.isnot(None),
+            )
+            .all()
+        )
+    ]
+
+    delete_diary_images_from_supabase(diary_image_paths)
+
+    db.query(DiaryEntry).filter(
+        DiaryEntry.saved_region_id == stamp.saved_region_id
+    ).delete(synchronize_session=False)
+
+    db.delete(stamp)
+
+    # user_id+saved_region_id는 유니크 제약이라 도장은 여행지당 최대 1개뿐이므로,
+    # 이 도장을 지우면 소프트 삭제해뒀던 여행지 행도 완전히 정리한다.
+    if saved_region is not None:
+        db.delete(saved_region)
+
+    db.commit()
+
+    return True

@@ -72,10 +72,13 @@ def get_saved_region(
 @router.delete("/{saved_region_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_saved_region(
     saved_region_id: int,
+    keep_stamp: bool = False,
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    deleted = delete_saved_region(db, current_user_id, saved_region_id)
+    deleted = delete_saved_region(
+        db, current_user_id, saved_region_id, keep_stamp=keep_stamp
+    )
 
     if not deleted:
         raise HTTPException(

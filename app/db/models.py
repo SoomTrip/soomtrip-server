@@ -88,6 +88,7 @@ class SavedRegion(Base):
     score = Column(Integer, nullable=True)          # 추천 당시 점수 (참고용, 선택사항)
     mobility_choice = Column(String, nullable=True)  # 찜할 당시 사용자의 이동수단 선호값 ("walk_transit" 또는 "car")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)  # 소프트 삭제 시각. 도장/일기를 남기고 지운 경우 null이 아님
 
     user = relationship("User")
     spots = relationship("SavedRegionSpot", back_populates="saved_region", cascade="all, delete-orphan")

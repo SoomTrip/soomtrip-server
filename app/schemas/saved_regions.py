@@ -68,6 +68,7 @@ class SavedRegionResponse(BaseModel):
     score: int | None = None
     mobility_choice: MobilityChoice | None = None
     created_at: datetime
+    has_stamp: bool = False
 
     shared_from: SavedRegionSharedFromResponse | None = None
     shared_to: list[SavedRegionSharedToResponse] = []
