@@ -24,6 +24,7 @@ ROUTE_CACHE_TTL = timedelta(hours=23)
 def attach_segment_info_to_spots(
     spots: list[dict],
     segments: list[dict],
+    default_mobility_choice: str = "car",
     car_segments: list[dict] | None = None,
 ) -> list[RouteSpotResponse]:
     route_spots = []
@@ -37,7 +38,7 @@ def attach_segment_info_to_spots(
         )
 
         car_alternative = None
-        mobility_used = segment.get("mobility_used")
+        mobility_used = segment.get("mobility_used") or default_mobility_choice
         is_fallback = mobility_used == "fallback_car"
         duration = segment.get("duration_minutes")
 
@@ -113,6 +114,7 @@ def create_optimized_route(
             "spots": attach_segment_info_to_spots(
                 ordered_spots,
                 real_info["segments"],
+                default_mobility_choice=mobility_choice,
             ),
             "total_distance_km": real_info["distance_km"],
             "total_duration_minutes": real_info["duration_minutes"],
@@ -303,6 +305,7 @@ def refresh_expired_route_entries(
         route_spots = attach_segment_info_to_spots(
             ordered_spots,
             real_info["segments"],
+            default_mobility_choice=mobility_choice,
         )
 
         for index, route_spot in enumerate(route_spots):
