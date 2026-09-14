@@ -13,13 +13,29 @@ from app.db.models import (
     Stamp,
     User,
 )
-from app.services.upload_service import delete_diary_images_from_supabase
-
+from app.services.upload_service import (
+    create_profile_image_signed_url,
+    delete_diary_images_from_supabase,
+)
 from app.schemas.users import UserUpdateRequest
 
 
+def attach_signed_profile_image_url(user: User) -> User:
+    user.signed_profile_image_url = create_profile_image_signed_url(
+        user.profile_image
+    )
+    return user
+
+def is_uploaded_profile_image(image_path: str | None) -> bool:
+    return image_path is not None and image_path.startswith("profile/")
+
 def get_user_by_id(db: Session, user_id: int) -> User | None:
-    return db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        return None
+
+    return attach_signed_profile_image_url(user)
 
 
 def update_user(
@@ -27,6 +43,8 @@ def update_user(
     user: User,
     request: UserUpdateRequest,
 ) -> User:
+    old_profile_image = user.profile_image
+
     if request.nickname is not None:
         user.nickname = request.nickname
 
@@ -36,16 +54,25 @@ def update_user(
     db.commit()
     db.refresh(user)
 
-    return user
+    if (
+        request.profile_image is not None
+        and old_profile_image != user.profile_image
+        and is_uploaded_profile_image(old_profile_image)
+    ):
+        delete_diary_images_from_supabase([old_profile_image])
+
+    return attach_signed_profile_image_url(user)
 
 def delete_user(
     db: Session,
     user_id: int,
 ) -> bool:
-    user = get_user_by_id(db, user_id)
+    user = db.query(User).filter(User.id == user_id).first()
 
     if user is None:
         return False
+
+    profile_image_path = user.profile_image
 
     saved_region_ids = [
         saved_region_id
@@ -117,6 +144,9 @@ def delete_user(
         RefreshToken.user_id == user_id
     ).delete(synchronize_session=False)
 
+    if is_uploaded_profile_image(profile_image_path):
+        delete_diary_images_from_supabase([profile_image_path])
+
     db.delete(user)
     db.commit()
 
@@ -131,7 +161,7 @@ def complete_onboarding(
     db.commit()
     db.refresh(user)
 
-    return user
+    return attach_signed_profile_image_url(user)
 
 def agree_to_required_terms(
     db: Session,
@@ -148,4 +178,5 @@ def agree_to_required_terms(
     db.commit()
     db.refresh(user)
 
-    return user
+    return attach_signed_profile_image_url(user)
+
