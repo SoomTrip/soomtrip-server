@@ -113,7 +113,16 @@ def create_profile_image_signed_url(
     if image_path in DEFAULT_PROFILE_IMAGE_KEYS:
         return None
 
-    return create_diary_image_signed_url(image_path, expires_in)
+    if image_path.startswith("http://") or image_path.startswith("https://"):
+        return image_path
+
+    if not image_path.startswith("profile/"):
+        return None
+
+    try:
+        return create_diary_image_signed_url(image_path, expires_in)
+    except ValueError:
+        return None
 
 def is_allowed_profile_image_path(
     image_path: str | None,
