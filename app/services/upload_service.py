@@ -54,6 +54,52 @@ def upload_diary_image_to_supabase(
 
     return file_path
 
+def upload_profile_image_to_supabase(
+    file: UploadFile,
+    user_id: int,
+) -> str:
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise ValueError("INVALID_IMAGE_TYPE")
+
+    if not settings.supabase_url:
+        raise ValueError("SUPABASE_URL_NOT_SET")
+
+    if not settings.supabase_service_role_key:
+        raise ValueError("SUPABASE_SERVICE_ROLE_KEY_NOT_SET")
+
+    bucket = settings.supabase_storage_bucket
+    extension = ALLOWED_IMAGE_TYPES[file.content_type]
+    file_path = f"profile/{user_id}/{uuid4()}{extension}"
+
+    upload_url = (
+        f"{settings.supabase_url}/storage/v1/object/"
+        f"{bucket}/{file_path}"
+    )
+
+    file_bytes = file.file.read()
+
+    response = httpx.post(
+        upload_url,
+        headers={
+            "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            "apikey": settings.supabase_service_role_key,
+            "Content-Type": file.content_type,
+            "x-upsert": "false",
+        },
+        content=file_bytes,
+        timeout=30,
+    )
+
+    if response.status_code >= 400:
+        raise ValueError("IMAGE_UPLOAD_FAILED")
+
+    return file_path
+
+def create_profile_image_signed_url(
+    image_path: str | None,
+    expires_in: int = 3600,
+) -> str | None:
+    return create_diary_image_signed_url(image_path, expires_in)
 
 def create_diary_image_signed_url(
     image_path: str | None,
@@ -61,6 +107,9 @@ def create_diary_image_signed_url(
 ) -> str | None:
     if image_path is None:
         return None
+
+    if image_path.startswith("http://") or image_path.startswith("https://"):
+        return image_path
 
     if not settings.supabase_url:
         raise ValueError("SUPABASE_URL_NOT_SET")
