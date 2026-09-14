@@ -27,10 +27,11 @@ else:
     app = FastAPI()
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 def root():
-    return {"message": "SoomTrip Server",
-            "environment":settings.app_env}
+    return {
+        "message": "SoomTrip Server",
+    }
 
 
 app.include_router(health_router)

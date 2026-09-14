@@ -4,7 +4,24 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.models import Friend, FriendStatus, User
+from app.services.upload_service import create_profile_image_signed_url
 
+
+def attach_signed_profile_image_url_to_user(user: User) -> User:
+    user.signed_profile_image_url = create_profile_image_signed_url(
+        user.profile_image
+    )
+    return user
+
+
+def attach_signed_profile_images_to_friend(friend: Friend) -> Friend:
+    if friend.requester is not None:
+        attach_signed_profile_image_url_to_user(friend.requester)
+
+    if friend.receiver is not None:
+        attach_signed_profile_image_url_to_user(friend.receiver)
+
+    return friend
 
 def create_friend_request(
     db: Session,
@@ -45,7 +62,7 @@ def create_friend_request(
             db.commit()
             db.refresh(existing_friend)
 
-            return existing_friend
+            return attach_signed_profile_images_to_friend(existing_friend)
 
         raise ValueError("FRIEND_REQUEST_ALREADY_EXISTS")
 
@@ -59,14 +76,13 @@ def create_friend_request(
     db.commit()
     db.refresh(friend)
 
-    return friend
-
+    return attach_signed_profile_images_to_friend(friend)
 
 def get_my_friends(
     db: Session,
     user_id: int,
 ) -> list[Friend]:
-    return (
+    friends = (
         db.query(Friend)
         .filter(
             Friend.status == FriendStatus.ACCEPTED,
@@ -78,12 +94,14 @@ def get_my_friends(
         .all()
     )
 
+    return [attach_signed_profile_images_to_friend(friend) for friend in friends]
+
 
 def get_received_friend_requests(
     db: Session,
     user_id: int,
 ) -> list[Friend]:
-    return (
+    friends = (
         db.query(Friend)
         .filter(
             Friend.receiver_id == user_id,
@@ -92,6 +110,8 @@ def get_received_friend_requests(
         .order_by(Friend.created_at.desc())
         .all()
     )
+
+    return [attach_signed_profile_images_to_friend(friend) for friend in friends]
 
 
 def accept_friend_request(
@@ -118,7 +138,7 @@ def accept_friend_request(
     db.commit()
     db.refresh(friend)
 
-    return friend
+    return attach_signed_profile_images_to_friend(friend)
 
 
 def reject_friend_request(
@@ -144,8 +164,7 @@ def reject_friend_request(
     db.commit()
     db.refresh(friend)
 
-    return friend
-
+    return attach_signed_profile_images_to_friend(friend)
 
 def delete_friend(
     db: Session,

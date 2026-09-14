@@ -41,6 +41,7 @@ class SavedRegionShareUserResponse(BaseModel):
     user_id: int
     nickname: str
     profile_image: str | None = None
+    signed_profile_image_url: str | None = None
 
 
 class SavedRegionSharedFromResponse(BaseModel):
@@ -48,6 +49,7 @@ class SavedRegionSharedFromResponse(BaseModel):
     user_id: int
     nickname: str
     profile_image: str | None = None
+    signed_profile_image_url: str | None = None
 
 
 class SavedRegionSharedToResponse(BaseModel):
@@ -55,6 +57,7 @@ class SavedRegionSharedToResponse(BaseModel):
     user_id: int
     nickname: str
     profile_image: str | None = None
+    signed_profile_image_url: str | None = None
     status: SavedRegionShareStatus
 
 
@@ -104,10 +107,12 @@ class SavedRegionShareListItem(BaseModel):
     sender_id: int
     sender_nickname: str
     sender_profile_image: str | None = None
+    sender_signed_profile_image_url: str | None = None
 
     receiver_id: int
     receiver_nickname: str
     receiver_profile_image: str | None = None
+    receiver_signed_profile_image_url: str | None = None
 
 
 class SavedRegionShareAcceptResponse(BaseModel):

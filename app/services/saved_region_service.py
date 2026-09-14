@@ -15,8 +15,10 @@ from app.db.models import (
     Stamp,
 )
 from app.schemas.saved_regions import SavedRegionCreateRequest
-from app.services.upload_service import delete_diary_images_from_supabase
-
+from app.services.upload_service import (
+    create_profile_image_signed_url,
+    delete_diary_images_from_supabase,
+)
 def create_saved_region(
     db: Session,
     user_id: int,
@@ -245,6 +247,9 @@ def get_shared_from_info(
         "user_id": share.sender.id,
         "nickname": share.sender.nickname,
         "profile_image": share.sender.profile_image,
+        "signed_profile_image_url": create_profile_image_signed_url(
+            share.sender.profile_image
+        ),
     }
 
 
@@ -270,6 +275,9 @@ def get_shared_to_info(
             "user_id": share.receiver.id,
             "nickname": share.receiver.nickname,
             "profile_image": share.receiver.profile_image,
+            "signed_profile_image_url": create_profile_image_signed_url(
+                share.receiver.profile_image
+            ),
             "status": share.status,
         }
         for share in shares
@@ -487,10 +495,16 @@ def build_share_list_item(share: SavedRegionShare) -> dict:
         "sender_id": share.sender.id,
         "sender_nickname": share.sender.nickname,
         "sender_profile_image": share.sender.profile_image,
+        "sender_signed_profile_image_url": create_profile_image_signed_url(
+            share.sender.profile_image
+        ),
 
         "receiver_id": share.receiver.id,
         "receiver_nickname": share.receiver.nickname,
         "receiver_profile_image": share.receiver.profile_image,
+        "receiver_signed_profile_image_url": create_profile_image_signed_url(
+            share.receiver.profile_image
+        ),
     }
 
 

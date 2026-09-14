@@ -44,11 +44,20 @@ def create_entry(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    diary_entry = create_diary_entry(
-        db=db,
-        user_id=current_user_id,
-        request=request,
-    )
+    try:
+        diary_entry = create_diary_entry(
+            db=db,
+            user_id=current_user_id,
+            request=request,
+        )
+    except ValueError as exc:
+        if str(exc) == "INVALID_DIARY_IMAGE_PATH":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid diary image path.",
+            ) from exc
+
+        raise
 
     if diary_entry is None:
         raise HTTPException(
@@ -116,12 +125,21 @@ def update_entry(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    diary_entry = update_my_diary_entry(
-        db=db,
-        user_id=current_user_id,
-        diary_entry_id=diary_entry_id,
-        request=request,
-    )
+    try:
+        diary_entry = update_my_diary_entry(
+            db=db,
+            user_id=current_user_id,
+            diary_entry_id=diary_entry_id,
+            request=request,
+        )
+    except ValueError as exc:
+        if str(exc) == "INVALID_DIARY_IMAGE_PATH":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid diary image path.",
+            ) from exc
+
+        raise
 
     if diary_entry is None:
         raise HTTPException(

@@ -14,6 +14,7 @@ class FriendUserResponse(BaseModel):
     nickname: str
     user_code: str
     profile_image: str | None = None
+    signed_profile_image_url: str | None = None
 
     class Config:
         from_attributes = True
