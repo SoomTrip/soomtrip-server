@@ -3,7 +3,17 @@ from sqlalchemy.orm import Session
 from app.db.models import DiaryEntry, SavedRegion
 from app.schemas.diary_entries import DiaryEntryCreateRequest, DiaryEntryUpdateRequest
 from app.services.stamp_service import create_stamp_if_not_exists
-from app.services.upload_service import delete_diary_images_from_supabase
+from app.services.upload_service import (
+    delete_diary_images_from_supabase,
+    is_uploaded_image_path,
+)
+
+def is_uploaded_diary_image(image_path: str | None, user_id: int) -> bool:
+    return is_uploaded_image_path(
+        image_path=image_path,
+        prefix="diary",
+        user_id=user_id,
+    )
 
 def create_diary_entry(
     db: Session,
@@ -21,6 +31,9 @@ def create_diary_entry(
 
     if saved_region is None:
         return None
+
+    if not is_uploaded_diary_image(request.image_url, user_id):
+        raise ValueError("INVALID_DIARY_IMAGE_PATH")
 
     diary_entry = DiaryEntry(
         saved_region_id=request.saved_region_id,
@@ -113,12 +126,18 @@ def update_my_diary_entry(
     if diary_entry is None:
         return None
 
+    old_image_url = diary_entry.image_url
+
+    if request.image_url is not None:
+        if not is_uploaded_diary_image(request.image_url, user_id):
+            raise ValueError("INVALID_DIARY_IMAGE_PATH")
+
+        diary_entry.image_url = request.image_url
+
     if request.title is not None:
         diary_entry.title = request.title
     if request.message is not None:
         diary_entry.message = request.message
-    if request.image_url is not None:
-        diary_entry.image_url = request.image_url
     if request.weather is not None:
         diary_entry.weather = request.weather
     if request.date is not None:
@@ -128,6 +147,13 @@ def update_my_diary_entry(
 
     db.commit()
     db.refresh(diary_entry)
+
+    if (
+        request.image_url is not None
+        and old_image_url != diary_entry.image_url
+        and is_uploaded_diary_image(old_image_url, user_id)
+    ):
+        delete_diary_images_from_supabase([old_image_url])
 
     return diary_entry
 
@@ -144,7 +170,7 @@ def delete_my_diary_entry(
 
     image_path = diary_entry.image_url
 
-    if image_path is not None:
+    if is_uploaded_diary_image(image_path, user_id):
         delete_diary_images_from_supabase([image_path])
 
     db.delete(diary_entry)

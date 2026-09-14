@@ -16,6 +16,7 @@ from app.db.models import (
 from app.services.upload_service import (
     create_profile_image_signed_url,
     delete_diary_images_from_supabase,
+    is_allowed_profile_image_path,
 )
 from app.schemas.users import UserUpdateRequest
 
@@ -43,12 +44,20 @@ def update_user(
     user: User,
     request: UserUpdateRequest,
 ) -> User:
+
+    
     old_profile_image = user.profile_image
 
     if request.nickname is not None:
         user.nickname = request.nickname
 
     if request.profile_image is not None:
+        if not is_allowed_profile_image_path(
+            image_path=request.profile_image,
+            user_id=user.id,
+        ):
+            raise ValueError("INVALID_PROFILE_IMAGE_PATH")
+
         user.profile_image = request.profile_image
 
     db.commit()

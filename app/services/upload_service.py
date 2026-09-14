@@ -12,6 +12,14 @@ ALLOWED_IMAGE_TYPES = {
     "image/webp": ".webp",
 }
 
+DEFAULT_PROFILE_IMAGE_KEYS = {
+    "profile1",
+    "profile2",
+    "profile3",
+    "profile4",
+    "profile5",
+}
+
 
 def upload_diary_image_to_supabase(
     file: UploadFile,
@@ -99,7 +107,31 @@ def create_profile_image_signed_url(
     image_path: str | None,
     expires_in: int = 3600,
 ) -> str | None:
+    if image_path is None:
+        return None
+
+    if image_path in DEFAULT_PROFILE_IMAGE_KEYS:
+        return None
+
     return create_diary_image_signed_url(image_path, expires_in)
+
+def is_allowed_profile_image_path(
+    image_path: str | None,
+    user_id: int,
+) -> bool:
+    if image_path is None:
+        return True
+
+    if image_path in DEFAULT_PROFILE_IMAGE_KEYS:
+        return True
+
+    if image_path.startswith(f"profile/{user_id}/"):
+        return True
+
+    if image_path.startswith("http://") or image_path.startswith("https://"):
+        return True
+
+    return False
 
 def create_diary_image_signed_url(
     image_path: str | None,
@@ -182,3 +214,13 @@ def delete_diary_images_from_supabase(
 
     if response.status_code >= 400:
         raise ValueError("IMAGE_DELETE_FAILED")
+
+def is_uploaded_image_path(
+    image_path: str | None,
+    prefix: str,
+    user_id: int,
+) -> bool:
+    if image_path is None:
+        return True
+
+    return image_path.startswith(f"{prefix}/{user_id}/")

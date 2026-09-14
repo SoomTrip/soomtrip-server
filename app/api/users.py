@@ -53,7 +53,16 @@ def update_me(
             detail="사용자를 찾을 수 없습니다.",
         )
 
-    return update_user(db, user, request)
+    try:
+        return update_user(db, user, request)
+    except ValueError as exc:
+        if str(exc) == "INVALID_PROFILE_IMAGE_PATH":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid profile image path.",
+            ) from exc
+
+        raise
 
 @router.patch("/me/onboarding-complete", response_model=UserMeResponse)
 def complete_my_onboarding(
