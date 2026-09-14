@@ -62,7 +62,10 @@ def get_my_saved_regions(
     return (
         db.query(SavedRegion)
         .options(joinedload(SavedRegion.spots))
-        .filter(SavedRegion.user_id == user_id)
+        .filter(
+            SavedRegion.user_id == user_id,
+            SavedRegion.deleted_at.is_(None),
+        )
         .order_by(SavedRegion.created_at.desc())
         .all()
     )
@@ -79,8 +82,21 @@ def get_my_saved_region_by_id(
         .filter(
             SavedRegion.id == saved_region_id,
             SavedRegion.user_id == user_id,
+            SavedRegion.deleted_at.is_(None),
         )
         .first()
+    )
+
+
+def has_stamp(
+    db: Session,
+    saved_region_id: int,
+) -> bool:
+    return (
+        db.query(Stamp.id)
+        .filter(Stamp.saved_region_id == saved_region_id)
+        .first()
+        is not None
     )
 
 
@@ -88,12 +104,14 @@ def delete_saved_region(
     db: Session,
     user_id: int,
     saved_region_id: int,
+    keep_stamp: bool = False,
 ) -> bool:
     saved_region = (
         db.query(SavedRegion)
         .filter(
             SavedRegion.id == saved_region_id,
             SavedRegion.user_id == user_id,
+            SavedRegion.deleted_at.is_(None),
         )
         .first()
     )
@@ -111,6 +129,18 @@ def delete_saved_region(
     db.query(RouteEntry).filter(
         RouteEntry.saved_region_id == saved_region_id
     ).delete(synchronize_session=False)
+
+    db.query(SavedRegionSpot).filter(
+        SavedRegionSpot.saved_region_id == saved_region_id
+    ).delete(synchronize_session=False)
+
+    # 도장(그리고 그 도장의 근거인 그림일기)을 남기고 싶다면, 여행지 자체는 완전히
+    # 지우지 않고 "저장 목록에서만 숨김" 처리한다(소프트 삭제). 도장/일기는
+    # saved_region_id로 이 행을 계속 그대로 참조하므로 데이터가 살아있다.
+    if keep_stamp and has_stamp(db, saved_region_id):
+        saved_region.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+        return True
 
     diary_image_paths = [
         image_url
@@ -132,10 +162,6 @@ def delete_saved_region(
 
     db.query(Stamp).filter(
         Stamp.saved_region_id == saved_region_id
-    ).delete(synchronize_session=False)
-
-    db.query(SavedRegionSpot).filter(
-        SavedRegionSpot.saved_region_id == saved_region_id
     ).delete(synchronize_session=False)
 
     db.delete(saved_region)
@@ -217,6 +243,7 @@ def build_saved_region_response(
         "score": saved_region.score,
         "mobility_choice": saved_region.mobility_choice,
         "created_at": saved_region.created_at,
+        "has_stamp": has_stamp(db, saved_region.id),
         "shared_from": shared_from,
         "shared_to": shared_to,
         "spots": saved_region.spots,

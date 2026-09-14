@@ -10,5 +10,6 @@ class StampResponse(BaseModel):
     region_name: str
     stamp_asset_key: str
     created_at: datetime
+    is_region_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
