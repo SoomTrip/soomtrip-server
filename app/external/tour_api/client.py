@@ -28,6 +28,7 @@ def _request(endpoint: str, params: dict) -> dict:
     }
     full_params = {**default_params, **params}
 
+
     response = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
@@ -62,27 +63,9 @@ def _request(endpoint: str, params: dict) -> dict:
             ) and not quota_exhausted
             if retryable and attempt < MAX_ATTEMPTS:
                 delay = RETRY_BACKOFF_SEC * (2 ** (attempt - 1)) + random.uniform(0, 0.3)
-                print(
-                    "[TourAPI retry] "
-                    f"endpoint={endpoint} "
-                    f"attempt={attempt}/{MAX_ATTEMPTS} "
-                    f"status={status_code} "
-                    f"error_type={type(exc).__name__} "
-                    f"wait={delay:.2f}s",
-                    flush=True,
-                )
+                
                 time.sleep(delay)
                 continue
-
-            print(
-                "[TourAPI HTTP error] "
-                f"endpoint={endpoint} "
-                f"status={status_code} "
-                f"error_type={type(exc).__name__} "
-                f"attempts={attempt} "
-                f"body={response_body}",
-                flush=True,
-            )
 
             raise TourApiError("TourAPI 요청 실패") from exc
 
@@ -93,10 +76,9 @@ def _request(endpoint: str, params: dict) -> dict:
 
     if result_code != "0000":
         print(
-            "[TourAPI response error] "
+            "[TourAPI error] "
             f"endpoint={endpoint} "
-            f"result_code={result_code} "
-            f"result_message={header.get('resultMsg')}",
+            f"result_code={result_code}",
             flush=True,
         )
 
