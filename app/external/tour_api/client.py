@@ -36,18 +36,12 @@ def _request(endpoint: str, params: dict) -> dict:
             if exc.response is not None
             else None
         )
-        response_body = (
-            exc.response.text[:500]
-            if exc.response is not None
-            else None
-        )
 
         print(
-            "[TourAPI HTTP error] "
+            "[TourAPI error] "
             f"endpoint={endpoint} "
             f"status={status_code} "
-            f"error_type={type(exc).__name__} "
-            f"body={response_body}",
+            f"error_type={type(exc).__name__}",
             flush=True,
         )
 
@@ -59,10 +53,9 @@ def _request(endpoint: str, params: dict) -> dict:
 
     if result_code != "0000":
         print(
-            "[TourAPI response error] "
+            "[TourAPI error] "
             f"endpoint={endpoint} "
-            f"result_code={result_code} "
-            f"result_message={header.get('resultMsg')}",
+            f"result_code={result_code}",
             flush=True,
         )
 
