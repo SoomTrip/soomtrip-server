@@ -1,5 +1,6 @@
 import random
 import re
+import time
 import concurrent.futures
 from collections import defaultdict
 from app.external.tour_api.client import get_area_based_list, get_location_based_list
@@ -26,6 +27,13 @@ NEARBY_RADIUS_CAR = 5000   # 자차: 5km
 NEARBY_FETCH_LIMIT = 100   # 주변 스팟 조회 시 최대 개수
 TOP_N = 10                 # 최종 앵커스팟 후보 개수
 MERGE_DISTANCE_KM = 5.0    # 같은 시군구일 때 병합 판단 거리(km)
+
+# 외부 API 호출량 제어 (한국관광공사 호출 제한 대응)
+INFRA_MAX_WORKERS = 4          # 주변 스팟 조회 동시 호출 수
+INFRA_BATCH_SIZE = 8           # 한 번에 조회하는 후보 수
+INFRA_TARGET_QUALIFIED = 20    # 컷오프 통과 후보가 이만큼 모이면 조회 중단
+INFRA_TIME_BUDGET_SEC = 20     # 주변 스팟 조회에 쓸 최대 시간
+DEMAND_MAX_WORKERS = 4         # 수요 통계 조회 동시 호출 수
 
 # 뚜벅이(좁은 반경)일 때 카테고리별 한도
 DEFAULT_CATEGORY_LIMIT_WALK = 6
@@ -122,8 +130,9 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
     EXCLUDED_CONTENT_TYPES = ["25"]  # 여행코스 제외 (개별 장소만)
 
     def fetch_nearby(spot):
+        """(상태, spot) 반환. 상태: ok / nocoord / error / insufficient"""
         if spot["latitude"] is None or spot["longitude"] is None:
-            return None
+            return "nocoord", None
 
         try:
             nearby_raw = get_location_based_list(
@@ -140,7 +149,7 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
                 f"error_type={type(exc).__name__}",
                 flush=True,
             )
-            return None
+            return "error", None
 
         # 숙박(B02) + 여행코스(25) 제외 필터링
         nearby_raw = [
@@ -155,7 +164,7 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
                 normalize_tour_item(n) for n in nearby_raw
                 if n.get("contentid") != spot["id"]
             ]
-            return spot
+            return "ok", spot
 
         print(
             "[Recommendation nearby insufficient] "
@@ -165,24 +174,46 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
             f"required={MIN_NEARBY_SPOTS}",
             flush=True,
         )
-        return None
+        return "insufficient", None
+
+    # 최종 결과는 상위 TOP_N 중 랜덤 1곳이라 전 후보를 다 조회할 필요가 없다.
+    # 후보를 섞어 배치 단위로 조회하다가 통과 후보가 목표 수에 차면 멈춘다.
+    unique_candidates = list({spot["id"]: spot for spot in candidates}.values())
+    random.shuffle(unique_candidates)
 
     filtered = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(fetch_nearby, spot) for spot in candidates]
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                result = future.result()
-                if result is not None:
-                    filtered.append(result)
-            except Exception:
-                continue  # 개별 실패는 건너뜀
+    processed = 0
+    errors = 0
+    started_at = time.monotonic()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=INFRA_MAX_WORKERS) as executor:
+        for start in range(0, len(unique_candidates), INFRA_BATCH_SIZE):
+            if len(filtered) >= INFRA_TARGET_QUALIFIED:
+                break
+            if time.monotonic() - started_at > INFRA_TIME_BUDGET_SEC:
+                print(
+                    "[Recommendation infra cutoff] time budget exceeded "
+                    f"budget={INFRA_TIME_BUDGET_SEC}s",
+                    flush=True,
+                )
+                break
+
+            batch = unique_candidates[start:start + INFRA_BATCH_SIZE]
+            for status, spot in executor.map(fetch_nearby, batch):
+                processed += 1
+                if status == "ok":
+                    filtered.append(spot)
+                elif status == "error":
+                    errors += 1
 
     print(
         "[Recommendation infra cutoff] "
         f"mobility={mobility_choice} "
         f"radius={radius} "
         f"before={len(candidates)} "
+        f"unique={len(unique_candidates)} "
+        f"processed={processed} "
+        f"api_errors={errors} "
         f"after={len(filtered)}",
         flush=True,
     )
@@ -355,14 +386,30 @@ def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget
     """
     혼잡도 API 호출 실패 시 중립값으로 처리하고 계속 진행
     """
-    def score_one(c):
+    # 같은 시군구의 후보는 체류 강도 값이 같으므로 시군구별로 한 번만 조회해 공유한다.
+    region_keys = {
+        (c.get("stat_area_code"), c.get("stat_sigungu_code")) for c in candidates
+    }
+
+    def fetch_intensity(key):
         try:
-            val = get_stay_intensity(
-                area_cd=c.get("stat_area_code"),
-                signgu_cd=c.get("stat_sigungu_code"),
-            )
+            return key, get_stay_intensity(area_cd=key[0], signgu_cd=key[1])
         except Exception:
-            val = None # 실패하면 calculate_crowd_score가 자동으로 중립값
+            return key, None  # 실패하면 calculate_crowd_score가 자동으로 중립값
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=DEMAND_MAX_WORKERS) as executor:
+        intensity_by_key = dict(executor.map(fetch_intensity, region_keys))
+
+    print(
+        "[Recommendation demand] "
+        f"candidates={len(candidates)} unique_regions={len(region_keys)}",
+        flush=True,
+    )
+
+    for c in candidates:
+        val = intensity_by_key.get(
+            (c.get("stat_area_code"), c.get("stat_sigungu_code"))
+        )
         try:
             result = calculate_final_score(
                 spot=c,
@@ -376,11 +423,6 @@ def enrich_with_demand_score(candidates: list[dict], theme_weights: dict, budget
         except Exception:
             c["score"] = 0.0 # 스코어링 자체가 실패하면 최하점 처리(후보에서 자연스럽게 밀려남)
             c["score_detail"] = {}
-
-        return c
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        candidates = list(executor.map(score_one, candidates))
 
     return candidates
 
