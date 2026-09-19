@@ -1,4 +1,6 @@
 import os
+import random
+import time
 import requests
 from dotenv import load_dotenv
 
@@ -6,6 +8,10 @@ load_dotenv()
 
 TOUR_API_KEY = os.getenv("TOUR_API_KEY")
 BASE_URL = "https://apis.data.go.kr/B551011/KorService2"
+
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SEC = 0.5
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class TourApiError(Exception):
@@ -22,30 +28,47 @@ def _request(endpoint: str, params: dict) -> dict:
     }
     full_params = {**default_params, **params}
 
-    try:
-        response = requests.get(
-            f"{BASE_URL}/{endpoint}",
-            params=full_params,
-            timeout=5,
-        )
-        response.raise_for_status()
 
-    except requests.exceptions.RequestException as exc:
-        status_code = (
-            exc.response.status_code
-            if exc.response is not None
-            else None
-        )
+    response = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            response = requests.get(
+                f"{BASE_URL}/{endpoint}",
+                params=full_params,
+                timeout=5,
+            )
+            response.raise_for_status()
+            break
 
-        print(
-            "[TourAPI error] "
-            f"endpoint={endpoint} "
-            f"status={status_code} "
-            f"error_type={type(exc).__name__}",
-            flush=True,
-        )
+        except requests.exceptions.RequestException as exc:
+            status_code = (
+                exc.response.status_code
+                if exc.response is not None
+                else None
+            )
+            response_body = (
+                exc.response.text[:500]
+                if exc.response is not None
+                else None
+            )
 
-        raise TourApiError("TourAPI 요청 실패") from exc
+            # 응답 자체가 없는 경우(타임아웃/연결 오류)와 429·5xx만 재시도한다.
+            # 일일 한도를 다 쓴 경우(Remaining=0)는 재시도해도 소용없으므로 제외한다.
+            quota_exhausted = (
+                exc.response is not None
+                and exc.response.headers.get("X-RateLimit-Remaining") == "0"
+            )
+            retryable = (
+                status_code is None or status_code in RETRYABLE_STATUS_CODES
+            ) and not quota_exhausted
+            if retryable and attempt < MAX_ATTEMPTS:
+                delay = RETRY_BACKOFF_SEC * (2 ** (attempt - 1)) + random.uniform(0, 0.3)
+                
+                time.sleep(delay)
+                continue
+
+            raise TourApiError("TourAPI 요청 실패") from exc
+
     data = response.json()
 
     header = data.get("response", {}).get("header", {})

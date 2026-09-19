@@ -1,9 +1,15 @@
 import os
+import random
+import time
 import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
+
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SEC = 0.5
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 DEMAND_API_KEY = os.getenv("TOUR_API_KEY")  # 관광공사 API는 보통 같은 인증키 공용
 DEMAND_BASE_URL = "https://apis.data.go.kr/B551011/AreaTarDemDsService"
@@ -44,11 +50,32 @@ def get_stay_intensity(area_cd: str, signgu_cd: str, base_ym: str = None) -> flo
         "_type": "json",
     }
 
-    try:
-        response = requests.get(f"{DEMAND_BASE_URL}/areaTarSjrnDsList", params=params, timeout=5)
-        response.raise_for_status()
-    except requests.exceptions.RequestException:
-        return None  # 실패 시 조용히 None 반환 (전체 추천 흐름을 막지 않기 위함)
+    response = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            response = requests.get(f"{DEMAND_BASE_URL}/areaTarSjrnDsList", params=params, timeout=5)
+            response.raise_for_status()
+            break
+        except requests.exceptions.RequestException as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            # 일일 한도를 다 쓴 경우(Remaining=0)는 재시도해도 소용없으므로 바로 포기한다.
+            quota_exhausted = (
+                exc.response is not None
+                and exc.response.headers.get("X-RateLimit-Remaining") == "0"
+            )
+            retryable = (
+                status_code is None or status_code in RETRYABLE_STATUS_CODES
+            ) and not quota_exhausted
+            if retryable and attempt < MAX_ATTEMPTS:
+                time.sleep(RETRY_BACKOFF_SEC * (2 ** (attempt - 1)) + random.uniform(0, 0.3))
+                continue
+            print(
+                "[DemandAPI HTTP error] "
+                f"area_cd={area_cd} signgu_cd={signgu_cd} "
+                f"status={status_code} error_type={type(exc).__name__} attempts={attempt}",
+                flush=True,
+            )
+            return None  # 실패 시 조용히 None 반환 (전체 추천 흐름을 막지 않기 위함)
 
     try:
         data = response.json()
