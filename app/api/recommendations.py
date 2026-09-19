@@ -36,6 +36,11 @@ def create_recommendation(
         preference_id=request.preference_id,
     )
 
+    if recommendation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="해당 취향 결과를 찾을 수 없습니다.",
+        )
     print(
         "[Recommendation API done] "
         f"user_id={current_user_id} "
@@ -44,11 +49,5 @@ def create_recommendation(
         f"elapsed={perf_counter() - started_at:.2f}s",
         flush=True,
     )
-
-    if recommendation is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="해당 취향 결과를 찾을 수 없습니다.",
-        )
 
     return recommendation

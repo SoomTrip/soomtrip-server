@@ -334,12 +334,6 @@ def balance_categories(spots: list[dict], theme_weights: dict, mobility_choice: 
         default_limit = DEFAULT_CATEGORY_LIMIT_CAR
         preferred_limit = PREFERRED_CATEGORY_LIMIT_CAR
 
-    print(
-        "[Recommendation engine start] "
-        f"area_code={preference.area_code} "
-        f"mobility={preference.mobility_choice}",
-        flush=True,
-    )
     top_theme = max(theme_weights, key=theme_weights.get) if theme_weights else None
     preferred_category = THEME_TO_PREFERRED_CATEGORY.get(top_theme)
 
@@ -405,6 +399,12 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
     처리할 수 있게 함.
     """
     try:
+        print(
+            "[Recommendation engine start] "
+            f"area_code={preference.area_code} "
+            f"mobility={preference.mobility_choice}",
+            flush=True,
+        )
         # 1. 취향 가중치 정규화
         theme_weights = normalize_theme_weights(preference.theme_weights)
 
