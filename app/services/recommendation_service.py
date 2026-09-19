@@ -65,8 +65,23 @@ def create_recommendation_for_preference(
     )
 
     if preference_result is None:
+        print(
+            "[Recommendation Service] preference not found "
+            f"user_id={user_id} preference_id={preference_id}",
+            flush=True,
+        )
         return None
 
     preference_input = convert_preference_result_to_input(preference_result)
+    print(
+        "[Recommendation Service] converted preference "
+        f"preference_id={preference_id} "
+        f"area_code={preference_input.area_code} "
+        f"mobility={preference_input.mobility_choice} "
+        f"activity_intensity={preference_input.activity_intensity} "
+        f"indoor={preference_input.indoor_choice} "
+        f"theme_weights={preference_input.theme_weights}",
+        flush=True,
+    )
 
     return get_recommendations(preference_input)
