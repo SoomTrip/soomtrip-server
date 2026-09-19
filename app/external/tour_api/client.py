@@ -23,18 +23,52 @@ def _request(endpoint: str, params: dict) -> dict:
     full_params = {**default_params, **params}
 
     try:
-        response = requests.get(f"{BASE_URL}/{endpoint}", params=full_params, timeout=5)
+        response = requests.get(
+            f"{BASE_URL}/{endpoint}",
+            params=full_params,
+            timeout=5,
+        )
         response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        raise TourApiError(f"TourAPI 요청 실패: {e}")
 
+    except requests.exceptions.RequestException as exc:
+        status_code = (
+            exc.response.status_code
+            if exc.response is not None
+            else None
+        )
+        response_body = (
+            exc.response.text[:500]
+            if exc.response is not None
+            else None
+        )
+
+        print(
+            "[TourAPI HTTP error] "
+            f"endpoint={endpoint} "
+            f"status={status_code} "
+            f"error_type={type(exc).__name__} "
+            f"body={response_body}",
+            flush=True,
+        )
+
+        raise TourApiError("TourAPI 요청 실패") from exc
     data = response.json()
 
     header = data.get("response", {}).get("header", {})
     result_code = header.get("resultCode")
 
     if result_code != "0000":
-        raise TourApiError(f"TourAPI 에러 [{result_code}]: {header.get('resultMsg')}")
+        print(
+            "[TourAPI response error] "
+            f"endpoint={endpoint} "
+            f"result_code={result_code} "
+            f"result_message={header.get('resultMsg')}",
+            flush=True,
+        )
+
+        raise TourApiError(
+            f"TourAPI 에러 [{result_code}]: {header.get('resultMsg')}"
+        )
 
     return data["response"]["body"]
 
