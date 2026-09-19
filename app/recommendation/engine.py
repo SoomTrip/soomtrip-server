@@ -53,6 +53,12 @@ def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -
     sorted_themes = sorted(theme_weights.items(), key=lambda x: x[1], reverse=True)
     top_themes = [t[0] for t in sorted_themes[:top_k]]
 
+    print(
+        "[Recommendation candidates start] "
+        f"area_code={area_code} top_themes={top_themes}",
+        flush=True,
+    )
+
     candidates = []
     seen_combinations = set()
 
@@ -73,11 +79,34 @@ def get_candidate_regions(area_code: str, theme_weights: dict, top_k: int = 3) -
                     content_type_id=content_type_id,
                     num_of_rows=50,
                 )
+
+                print(
+                    "[Recommendation candidate query] "
+                    f"area_code={area_code} "
+                    f"theme={theme} "
+                    f"cat1={cat1} "
+                    f"content_type_id={content_type_id} "
+                    f"item_count={len(items)}",
+                    flush=True,
+                )
                 candidates.extend([normalize_tour_item(i) for i in items])
-            except Exception:
-                # 이 카테고리 조회만 실패, 다른 카테고리는 계속 진행
+            except Exception as exc:
+                print(
+                    "[Recommendation candidate error] "
+                    f"area_code={area_code} "
+                    f"theme={theme} "
+                    f"cat1={cat1} "
+                    f"content_type_id={content_type_id} "
+                    f"error_type={type(exc).__name__}",
+                    flush=True,
+                )
                 continue
 
+    print(
+        "[Recommendation candidates done] "
+        f"area_code={area_code} total={len(candidates)}",
+        flush=True,
+    )
     return candidates
 
 
@@ -103,8 +132,14 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
                 radius=radius,
                 num_of_rows=NEARBY_FETCH_LIMIT,
             )
-        except Exception:
-            # 이 후보 하나만 실패 처리, 전체는 게속 진행
+        except Exception as exc:
+            print(
+                "[Recommendation nearby error] "
+                f"spot_id={spot.get('id')} "
+                f"spot_name={spot.get('name')} "
+                f"error_type={type(exc).__name__}",
+                flush=True,
+            )
             return None
 
         # 숙박(B02) + 여행코스(25) 제외 필터링
@@ -121,6 +156,15 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
                 if n.get("contentid") != spot["id"]
             ]
             return spot
+
+        print(
+            "[Recommendation nearby insufficient] "
+            f"spot_id={spot.get('id')} "
+            f"spot_name={spot.get('name')} "
+            f"nearby_count={len(nearby_raw)} "
+            f"required={MIN_NEARBY_SPOTS}",
+            flush=True,
+        )
         return None
 
     filtered = []
@@ -134,6 +178,14 @@ def apply_infra_cutoff(candidates: list[dict], mobility_choice: str = None) -> l
             except Exception:
                 continue  # 개별 실패는 건너뜀
 
+    print(
+        "[Recommendation infra cutoff] "
+        f"mobility={mobility_choice} "
+        f"radius={radius} "
+        f"before={len(candidates)} "
+        f"after={len(filtered)}",
+        flush=True,
+    )
     return filtered
 
 def extract_region_name(address: str) -> str:
@@ -282,6 +334,12 @@ def balance_categories(spots: list[dict], theme_weights: dict, mobility_choice: 
         default_limit = DEFAULT_CATEGORY_LIMIT_CAR
         preferred_limit = PREFERRED_CATEGORY_LIMIT_CAR
 
+    print(
+        "[Recommendation engine start] "
+        f"area_code={preference.area_code} "
+        f"mobility={preference.mobility_choice}",
+        flush=True,
+    )
     top_theme = max(theme_weights, key=theme_weights.get) if theme_weights else None
     preferred_category = THEME_TO_PREFERRED_CATEGORY.get(top_theme)
 
@@ -358,9 +416,19 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
         # 3. 앵커스팟 후보 수집
         candidates = get_candidate_regions(preference.area_code, theme_weights)
 
+        print(
+            "[Recommendation stage] "
+            f"stage=candidate_regions count={len(candidates)}",
+            flush=True,
+        )
         # 4. 인프라 컷오프 (+ 주변 관광지 리스트 확보) — 이동수단에 따라 반경 다르게
         candidates = apply_infra_cutoff(candidates, preference.mobility_choice)
 
+        print(
+            "[Recommendation stage] "
+            f"stage=infra_cutoff count={len(candidates)}",
+            flush=True,
+        )
         if not candidates:
             return RecommendationResult(
                 mobility_choice=preference.mobility_choice,
@@ -374,7 +442,11 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
 
         # 6. 근접 중복 제거 (같은 동네 후보 하나로 합치기)
         candidates = merge_nearby_duplicates(candidates)
-
+        print(
+            "[Recommendation stage] "
+            f"stage=merge_duplicates count={len(candidates)}",
+            flush=True,
+        )
         # 7. 점수 높은 순 정렬 후 상위 N개만 추리기
         candidates.sort(key=lambda x: x["score"], reverse=True)
         top_candidates = candidates[:TOP_N]
@@ -443,8 +515,22 @@ def get_recommendations(preference: PreferenceInput) -> RecommendationResult:
                 candidates=[],
             )
 
+        print(
+            "[Recommendation stage] "
+            f"stage=result_candidates count={len(result_candidates)}",
+            flush=True,
+        )
         selected = random.choice(result_candidates)
 
+        print(
+            "[Recommendation selected] "
+            f"area_code={preference.area_code} "
+            f"content_id={selected.content_id} "
+            f"name={selected.name} "
+            f"nearby_count={selected.nearby_count}",
+            flush=True,
+        )
+        
         selected_raw = next(
             (c for c in top_candidates if extract_region_name(c["address"]) == selected.name),
             None

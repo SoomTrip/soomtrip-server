@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from time import perf_counter
 
 from app.api.deps import get_current_user_id
 from app.db.session import get_db
@@ -19,10 +20,29 @@ def create_recommendation(
     current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
+
+    started_at = perf_counter()
+
+    print(
+        "[Recommendation API start] "
+        f"user_id={current_user_id} "
+        f"preference_id={request.preference_id}",
+        flush=True,
+    )
+
     recommendation = create_recommendation_for_preference(
         db=db,
         user_id=current_user_id,
         preference_id=request.preference_id,
+    )
+
+    print(
+        "[Recommendation API done] "
+        f"user_id={current_user_id} "
+        f"preference_id={request.preference_id} "
+        f"candidate_count={len(recommendation.candidates)} "
+        f"elapsed={perf_counter() - started_at:.2f}s",
+        flush=True,
     )
 
     if recommendation is None:
